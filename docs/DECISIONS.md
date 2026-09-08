@@ -74,3 +74,31 @@ and structured-result formats; lock implementation; recovery-record
 persistence; observability/logging sink; Git/GitHub library or CLI; code/module
 layout; scheduler details; and multi-repository orchestrator design remain
 intentionally deferred.
+
+## D-010 - Adopt least-semantic actor ownership and strict worker/host separation
+
+**Decision:** The HUMAN OWNER adopts the least-semantic actor principle:
+each operation belongs to the least-semantic actor that can perform it safely,
+and technical capability never expands authority. AI COORDINATOR and AI
+SUPERVISOR are separate logical roles; the former performs repository-local
+semantic coordination and the latter performs review only. CODEX WORKER is
+worktree-only. HOST owns strictly authorized mechanical Git/GitHub mutation.
+FINALIZER is a separate, deterministic, non-LLM mechanical component, and the
+future RUNNER is minimal mechanical runtime infrastructure. Stable actor
+instructions are a future versioned-repository principle; external timing and
+empirical cadence tuning are future runtime principles. MULTI-REPO
+ORCHESTRATOR remains external and separate from repository-local coordination.
+
+**Consequence:** D-010 clarifies and amends D-003's combined worker/finalizer/
+host role description and D-009's conceptual host/control responsibilities:
+it does not rewrite their history, weaken HUMAN boundaries, or revoke D-009's
+Python-core adoption. The worker receives no branch, staging, commit, push,
+PR, GitHub metadata, or `.git` write authority. Supervisor decisions remain
+exactly `APPROVED`, `AI_REWORK`, and `HUMAN_REQUIRED`, are explicitly
+HEAD-bound, and cannot be published when review is unreliable. FINALIZER may
+merge only a pre-authorized Gate-AI unit after fresh-state validation; RUNNER
+does not become a governance engine. External GitHub metadata that did not
+occur must never be represented by a Git-tree commit. This owner decision was
+informed by later lessons observed in `rmolck/my-own-governance`, including
+GOV-007/GOV-008/GOV-009, solely as non-canonical conceptual provenance and
+never as a runtime dependency or adoption of unapproved behavior.
