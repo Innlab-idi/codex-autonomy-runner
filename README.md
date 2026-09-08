@@ -38,9 +38,13 @@ runtime dependency or a second organizational baseline.
 
 ## Current status
 
-BOOT-01 establishes the public contract. The later architecture assessment
-will decide implementation mechanisms; no technology, scheduler, CLI,
-configuration format, packaging, or locking design is selected here.
+BOOT-01 establishes the public contract. ARCH-01 assessed the implementation
+architecture, and ARCH-02 was resolved by the HUMAN OWNER. D-009 adopts Python
+as the deterministic host/control core; an optional minimal Windows PowerShell
+launcher may be used only for Windows or Task Scheduler invocation ergonomics.
+No functional runner, finalizer, adapter, or scheduler is implemented yet.
+The decisions D-009 leaves deferred remain deferred. CORE-01 is the first
+implementation checkpoint.
 
 Read [PROJECT.md](PROJECT.md) for scope and [docs/ROADMAP.md](docs/ROADMAP.md)
 for the proposed sequence.
