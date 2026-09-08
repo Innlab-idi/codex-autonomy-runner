@@ -3,6 +3,11 @@
 Status: assessment and recommendation; not an adopted decision
 Scope: future reusable autonomy runner implementation architecture
 
+Subsequent decision note: ARCH-01 remains the historical assessment that made
+this recommendation. The HUMAN OWNER later adopted it in ARCH-02, as durably
+recorded in GitHub issue #3; the canonical adopted decision is D-009 in
+`DECISIONS.md`.
+
 ## 1. Context and constraints
 
 This assessment concerns technical capacity only. `AUTONOMY.md` remains the

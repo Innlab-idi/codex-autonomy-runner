@@ -47,3 +47,30 @@
 **Decision:** Record `rmolck/my-own-governance` revision `9a40aaf6ce5039ceb5d127d43ccbdf4964a61398` as conceptual/documentary design provenance, especially for Gate-AI/finalizer policy.
 
 **Consequence:** It is neither a runtime dependency nor a second organizational baseline.
+
+## D-009 - Adopt Python control core with optional thin Windows launcher
+
+**Decision:** In ARCH-02, the HUMAN OWNER adopted the ARCH-01 recommendation,
+as durably recorded in GitHub issue #3: Python is the deterministic
+host/control core, and an optional minimal Windows PowerShell launcher may be
+used only for Windows or Task Scheduler invocation ergonomics. The launcher
+does not own governance parsing, semantic prompts, Git/GitHub logic, recovery
+semantics, result interpretation, or finalization logic.
+
+**Consequence:** Python conceptually owns structured subprocess execution and
+result handling; explicit UTF-8 boundaries; filesystem and changed-path
+validation including untracked paths; host-side Git/GitHub mechanics;
+per-repository locking; recovery; non-sensitive observability; and bounded
+mechanical finalizer safeguards. Consumer repositories retain product policy,
+queue, gates, decisions, context, delegation, and authority. Future
+multi-repository orchestration remains separate and must not embed
+consumer-private knowledge in this runner. This supersedes only D-007's
+"architecture remains undecided" aspect; D-007's separation of governance
+from execution mechanics remains in effect.
+
+This decision approves the architecture choice only. Python and supported
+platform versions; provisioning, packaging, and installation; configuration
+and structured-result formats; lock implementation; recovery-record
+persistence; observability/logging sink; Git/GitHub library or CLI; code/module
+layout; scheduler details; and multi-repository orchestrator design remain
+intentionally deferred.
