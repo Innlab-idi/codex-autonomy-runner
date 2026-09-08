@@ -1,0 +1,14 @@
+# Notice
+
+This public repository adopts the organizational baseline from
+`Innlab-idi/work-governance` at revision
+`2746015fddc02636772fedb9d8672b244cea0b4e`.
+
+Its initial autonomous-work and Gate-AI/finalizer contract records conceptual
+and documentary provenance from `rmolck/my-own-governance` at revision
+`9a40aaf6ce5039ceb5d127d43ccbdf4964a61398`.
+
+Neither reference is a runtime dependency of `codex-autonomy-runner`.
+`work-governance` remains the only canonical organizational baseline named by
+this repository; consumer repositories retain their own local authority,
+policy, and context.
