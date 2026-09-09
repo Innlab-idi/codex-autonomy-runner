@@ -1,6 +1,13 @@
 """Reusable execution primitives for codex-autonomy-runner."""
 
 from .native_process import NativeProcessLaunchError, NativeProcessResult, run_native_process
+from .execution_baseline import (
+    ExecutionBaseline,
+    ExecutionBaselineResolution,
+    ExecutionBaselineStatus,
+    IntendedRefObservation,
+    resolve_execution_baseline,
+)
 from .worker_boundary_validation import (
     WorkerBoundaryValidation,
     WorkerBoundaryViolation,
@@ -31,6 +38,11 @@ from .repository_inspection import (
 __all__ = [
     "NativeProcessLaunchError",
     "NativeProcessResult",
+    "ExecutionBaseline",
+    "ExecutionBaselineResolution",
+    "ExecutionBaselineStatus",
+    "IntendedRefObservation",
+    "resolve_execution_baseline",
     "WorkerBoundaryValidation",
     "WorkerBoundaryViolation",
     "validate_worker_boundary",
