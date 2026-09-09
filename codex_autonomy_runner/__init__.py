@@ -1,6 +1,11 @@
 """Reusable execution primitives for codex-autonomy-runner."""
 
 from .native_process import NativeProcessLaunchError, NativeProcessResult, run_native_process
+from .worker_boundary_validation import (
+    WorkerBoundaryValidation,
+    WorkerBoundaryViolation,
+    validate_worker_boundary,
+)
 from .changed_path_validation import ChangedPathValidation, validate_changed_paths
 from .supervisor_decisions import (
     SupervisorDecisionDiscovery,
@@ -26,6 +31,9 @@ from .repository_inspection import (
 __all__ = [
     "NativeProcessLaunchError",
     "NativeProcessResult",
+    "WorkerBoundaryValidation",
+    "WorkerBoundaryViolation",
+    "validate_worker_boundary",
     "ChangedPathValidation",
     "validate_changed_paths",
     "SupervisorDecisionDiscovery",
