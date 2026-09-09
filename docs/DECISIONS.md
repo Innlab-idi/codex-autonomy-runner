@@ -26,7 +26,7 @@
 
 ## D-005 — Binding, invalidation, and allowlisted closure
 
-**Decision:** Approval binds the substantive reviewed HEAD. A later substantive change, `AI_REWORK`, or `HUMAN_REQUIRED` invalidates it. A closure derived exactly from that HEAD may only record approved checkpoint closure metadata in `docs/WORK_QUEUE.md`.
+**Decision:** Approval binds the substantive reviewed HEAD. A later substantive change, `AI_SUPERVISOR: AI_REWORK`, or `AI_SUPERVISOR: HUMAN_REQUIRED` invalidates it. A closure derived exactly from that HEAD may only record approved checkpoint closure metadata in `docs/WORK_QUEUE.md`.
 
 **Consequence:** Closure is not a new semantic decision; an invalid diff requires fresh review, and merge uses HEAD-movement protection when available.
 
@@ -94,11 +94,15 @@ host role description and D-009's conceptual host/control responsibilities:
 it does not rewrite their history, weaken HUMAN boundaries, or revoke D-009's
 Python-core adoption. The worker receives no branch, staging, commit, push,
 PR, GitHub metadata, or `.git` write authority. Supervisor decisions remain
-exactly `APPROVED`, `AI_REWORK`, and `HUMAN_REQUIRED`, are explicitly
-HEAD-bound, and cannot be published when review is unreliable. FINALIZER may
-merge only a pre-authorized Gate-AI unit after fresh-state validation; RUNNER
-does not become a governance engine. External GitHub metadata that did not
-occur must never be represented by a Git-tree commit. This owner decision was
-informed by later lessons observed in `rmolck/my-own-governance`, including
-GOV-007/GOV-008/GOV-009, solely as non-canonical conceptual provenance and
-never as a runtime dependency or adoption of unapproved behavior.
+exactly `AI_SUPERVISOR: APPROVED`, `AI_SUPERVISOR: AI_REWORK`, and
+`AI_SUPERVISOR: HUMAN_REQUIRED`, are explicitly HEAD-bound, and cannot be
+published when review is unreliable. FINALIZER may merge only a previously
+authorized Gate-AI unit after fresh-state validation as a mechanical pre-worker
+phase; a subsequent refresh may still authorize one worker execution. HOST,
+not the worker, makes worker changes durable and review-ready through required
+authorized publication. RUNNER does not become a governance engine. External
+GitHub metadata that did not occur must never be represented by a Git-tree
+commit. This owner decision was informed by later lessons observed in
+`rmolck/my-own-governance`, including GOV-007/GOV-008/GOV-009, solely as
+non-canonical conceptual provenance and never as a runtime dependency or
+adoption of unapproved behavior.
