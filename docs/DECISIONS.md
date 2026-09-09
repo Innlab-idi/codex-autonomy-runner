@@ -106,3 +106,25 @@ commit. This owner decision was informed by later lessons observed in
 `rmolck/my-own-governance`, including GOV-007/GOV-008/GOV-009, solely as
 non-canonical conceptual provenance and never as a runtime dependency or
 adoption of unapproved behavior.
+
+## D-011 - Adopt adaptive roadmap reconciliation and just-in-time planning
+
+**Decision:** The HUMAN OWNER approved this decision durably in issue #24.
+Each consumer's roadmap is adaptive medium-term direction, not a compiled
+execution queue. Within a consumer's durable policy, AI COORDINATOR may make
+only conservative, traceable changes to future roadmap structure from durable
+evidence, completed work, and already approved decisions. Material choices
+remain with the HUMAN OWNER. Roadmap reconciliation and next-phase checkpoint
+decomposition are separate semantic planning work requiring an explicitly
+authorized planning transition; only the next currently valid phase may be
+decomposed just in time. RUNNER remains mechanical, materialized checkpoint
+contracts remain stable pending explicit durable reconciliation, and consumer
+repositories retain their own roadmap, queue, evidence, requirements,
+decisions, gates, delegation, and private context.
+
+**Consequence:** Future roadmap phases are not precompiled speculatively into
+the work queue: later durable evidence may reorder, replace, split, merge, or
+remove them. The coordinator may not invent work, requirements, evidence, or
+HUMAN-reserved choices, and may not silently alter an existing checkpoint's
+scope. The `vevi-exporter` P5-PREP experience is only non-normative conceptual
+provenance; its concrete structure is neither required nor a dependency here.
