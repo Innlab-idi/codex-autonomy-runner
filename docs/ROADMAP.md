@@ -9,4 +9,10 @@
 - **PILOT-\*** — controlled test repository.
 - **ADOPT-\*** — `vevi-exporter` as first real consumer.
 
-The roadmap is directional. It does not authorize opening or executing a checkpoint before its durable dependencies and gates permit it.
+The roadmap is directional and adaptive. Future phases may be reconciled when
+durable evidence or completed decisions invalidate their assumptions; the
+roadmap itself does not authorize execution or checkpoint creation. Only the
+next currently valid phase may be decomposed just in time through an explicitly
+authorized semantic planning transition. Future roadmap entries are therefore
+less stable than already materialized `WORK_QUEUE` checkpoints, whose durable
+contracts require explicit reconciliation rather than silent rewriting.
