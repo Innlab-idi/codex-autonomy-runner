@@ -1,6 +1,13 @@
 """Reusable execution primitives for codex-autonomy-runner."""
 
 from .native_process import NativeProcessLaunchError, NativeProcessResult, run_native_process
+from .supervisor_decisions import (
+    SupervisorDecisionDiscovery,
+    SupervisorDecisionKind,
+    SupervisorDecisionMatch,
+    SupervisorDecisionObservation,
+    discover_supervisor_decisions,
+)
 from .existing_work import (
     ExistingWorkDiscovery,
     ExistingWorkMatch,
@@ -18,6 +25,11 @@ from .repository_inspection import (
 __all__ = [
     "NativeProcessLaunchError",
     "NativeProcessResult",
+    "SupervisorDecisionDiscovery",
+    "SupervisorDecisionKind",
+    "SupervisorDecisionMatch",
+    "SupervisorDecisionObservation",
+    "discover_supervisor_decisions",
     "ExistingWorkDiscovery",
     "ExistingWorkMatch",
     "ExistingWorkObservation",
