@@ -1,6 +1,16 @@
 """Reusable execution primitives for codex-autonomy-runner."""
 
 from .native_process import NativeProcessLaunchError, NativeProcessResult, run_native_process
+from .finalizer_eligibility import (
+    CurrentHeadRelationship,
+    EligibleFinalizerUnit,
+    FinalizerEligibility,
+    FinalizerEligibilityObservation,
+    FinalizerEligibilityPath,
+    FinalizerEligibilityViolation,
+    FinalizerTarget,
+    validate_finalizer_eligibility,
+)
 from .pre_worker_preparation import (
     PreWorkerPreparationValidation,
     PreWorkerPreparationViolation,
@@ -43,6 +53,14 @@ from .repository_inspection import (
 __all__ = [
     "NativeProcessLaunchError",
     "NativeProcessResult",
+    "CurrentHeadRelationship",
+    "EligibleFinalizerUnit",
+    "FinalizerEligibility",
+    "FinalizerEligibilityObservation",
+    "FinalizerEligibilityPath",
+    "FinalizerEligibilityViolation",
+    "FinalizerTarget",
+    "validate_finalizer_eligibility",
     "PreWorkerPreparationValidation",
     "PreWorkerPreparationViolation",
     "validate_pre_worker_preparation",
