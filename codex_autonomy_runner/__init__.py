@@ -11,6 +11,14 @@ from .finalizer_eligibility import (
     FinalizerTarget,
     validate_finalizer_eligibility,
 )
+from .finalizer_closure import (
+    ALLOWLISTED_CLOSURE_PATH,
+    FinalizerClosurePlan,
+    FinalizerClosureResult,
+    FinalizerClosureViolation,
+    derive_allowlisted_closure,
+    validate_allowlisted_closure,
+)
 from .pre_worker_preparation import (
     PreWorkerPreparationValidation,
     PreWorkerPreparationViolation,
@@ -61,6 +69,12 @@ __all__ = [
     "FinalizerEligibilityViolation",
     "FinalizerTarget",
     "validate_finalizer_eligibility",
+    "ALLOWLISTED_CLOSURE_PATH",
+    "FinalizerClosurePlan",
+    "FinalizerClosureResult",
+    "FinalizerClosureViolation",
+    "derive_allowlisted_closure",
+    "validate_allowlisted_closure",
     "PreWorkerPreparationValidation",
     "PreWorkerPreparationViolation",
     "validate_pre_worker_preparation",
