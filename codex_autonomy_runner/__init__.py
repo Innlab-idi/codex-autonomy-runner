@@ -19,6 +19,17 @@ from .finalizer_closure import (
     derive_allowlisted_closure,
     validate_allowlisted_closure,
 )
+from .finalizer_publication import (
+    FinalizerPublicationFailureStage,
+    FinalizerPublicationResult,
+    FinalizerPublicationStatus,
+    FinalizerPublicationTransport,
+    FinalizerPublicationViolation,
+    NativeFinalizerPublicationTransport,
+    RemoteRefObservation,
+    ResolvedFinalizerPublicationDestination,
+    publish_allowlisted_closure,
+)
 from .pre_worker_preparation import (
     PreWorkerPreparationValidation,
     PreWorkerPreparationViolation,
@@ -75,6 +86,15 @@ __all__ = [
     "FinalizerClosureViolation",
     "derive_allowlisted_closure",
     "validate_allowlisted_closure",
+    "FinalizerPublicationFailureStage",
+    "FinalizerPublicationResult",
+    "FinalizerPublicationStatus",
+    "FinalizerPublicationTransport",
+    "FinalizerPublicationViolation",
+    "NativeFinalizerPublicationTransport",
+    "RemoteRefObservation",
+    "ResolvedFinalizerPublicationDestination",
+    "publish_allowlisted_closure",
     "PreWorkerPreparationValidation",
     "PreWorkerPreparationViolation",
     "validate_pre_worker_preparation",
