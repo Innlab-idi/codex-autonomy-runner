@@ -18,4 +18,62 @@ Operational coordination only. Requirements, architecture, and governance live i
 | CORE-08 | AI | DONE | Implement only deterministic pure execution-baseline resolution over caller-supplied fresh durable intended-ref observation and CORE-04 existing-work discovery for one already-selected checkpoint: if unique active work exists, preserve its exact PR/branch/HEAD; if none exists, freeze the exact observed intended-ref HEAD as the new-work baseline; ambiguous existing work stays unresolved. Excludes live Git/GitHub/network I/O, branch creation/checkout, deriving branch names, queue/governance parsing or checkpoint selection, worker invocation, repository mutation, HOST publication, finalization, locking, recovery, observability, scheduler, multi-repo orchestration, packaging, and consumer-specific rules. | AI SUPERVISOR approved substantive HEAD `807b358309703edc060169e84706b913882175cf`; closure materialized. |
 | CORE-09 | AI | DONE | Implement only deterministic pure pre-worker preparation validation over a caller-supplied CORE-08 execution-baseline resolution and CORE-02 `RepositoryInspection`: require a resolved baseline, a clean prepared working tree, and the exact expected HEAD; for existing work additionally require the exact reconciled branch and non-detached state; for new work require only a non-detached prepared branch without deriving or naming it. Excludes repository/path resolution, Git/filesystem/GitHub I/O, branch creation/checkout/naming, worker invocation, allowlist derivation, HOST publication, finalization, locking, recovery, observability, scheduler, multi-repo orchestration, packaging, and consumer-specific rules. | AI SUPERVISOR approved substantive HEAD `0269f8cb6684417551a6ec4dcb5711a6fa6b8750`; closure materialized. |
 | ARCH-04 | HUMAN | DONE | Materialize only the HUMAN OWNER-approved adaptive-roadmap authority contract: roadmap reconciliation by AI COORDINATOR may conservatively restructure future phases from durable evidence and approved decisions without crossing HUMAN-reserved choices; only the next currently valid phase may be decomposed just-in-time into executable checkpoints through an explicitly authorized planning transition; active/materialized checkpoint contracts may not be silently rewritten. Preserve RUNNER as mechanical and consumer-local ownership of roadmap/work queue/evidence/delegation. | AI SUPERVISOR approved substantive HEAD `6c922b0c10edddebb08bcbef65c5c921ff5ca1c4`; HUMAN OWNER authorized closure/merge in PR #26, with that authorization durably persisted by AI COORDINATOR from the owner's explicit conversation instruction; closure materialized. |
-| PLAN-FINALIZER-01 | AI | READY | Reconcile the completed CORE and current durable finalizer policy, then decompose only the next valid `FINALIZER-*` phase into the minimum executable checkpoints with dependencies, Gate AI/HUMAN, evidence requirements, done criteria, scope limits, and ordering. Planning only: do not implement FINALIZER, HOST, RUNNER, Git/GitHub mechanics, or any later roadmap phase. | D-011 planning transition authorized from fresh durable state; HUMAN OWNER instructed the AI COORDINATOR to continue, and `FINALIZER-*` is the next currently valid roadmap phase after completed CORE/ARCH-04. |
+| PLAN-FINALIZER-01 | AI | DONE | Reconcile the completed CORE and current durable finalizer policy, then decompose only the next valid `FINALIZER-*` phase into the minimum executable checkpoints with dependencies, Gate AI/HUMAN, evidence requirements, done criteria, scope limits, and ordering. Planning only: do not implement FINALIZER, HOST, RUNNER, Git/GitHub mechanics, or any later roadmap phase. | AI SUPERVISOR approved substantive HEAD `b6f47039d3947b6cbf19b9c40ed110a5967ac353`; closure materialized. |
+| FINALIZER-01 | AI | READY | Implement only pure, deterministic finalizer-eligibility reconciliation over caller-supplied fresh durable observations: bind repository/PR/checkpoint/Gate/state, substantive HEAD, the exact current AI SUPERVISOR decision, invalidation status, checks, mergeability, and HUMAN-reserved condition; determine whether an already-approved unit is eligible and whether an allowlisted closure is required. No Git/GitHub I/O or mutation. | Starts only after PLAN-FINALIZER-01 is approved and closed. |
+
+## FINALIZER phase checkpoint plan
+
+This is the just-in-time plan for the selected `FINALIZER-*` phase. Only
+`FINALIZER-01` above is materialized as `READY`; the later entries are not yet
+work-queue checkpoints and receive no state until their dependencies permit a
+future planning/reconciliation action.
+
+### FINALIZER-01 — Pure eligibility reconciliation
+
+- **Dependencies:** Approved and closed `PLAN-FINALIZER-01`; caller-supplied fresh durable observations for repository/PR/checkpoint identity, Gate/state, substantive HEAD, current supervisor-decision discovery, invalidation/substantive-change status, checks, mergeability, and HUMAN-reserved condition.
+- **Gate:** AI. This applies existing D-003/D-004/D-005/D-010 rules mechanically and makes no material product, authority, or security decision.
+- **Objective and CORE reuse:** Define the immutable finalizer input/result and pure eligibility validation. Reuse CORE-04 exact existing-work identity and CORE-05 exact current supervisor-decision reconciliation; require a unique `AI_SUPERVISOR: APPROVED` bound to the substantive HEAD. CORE-03 may supply the existing operational-result vocabulary to a caller, but eligibility itself remains distinct from an invocation outcome. No CORE primitive is forced into the contract when it belongs to worker/HOST preparation instead.
+- **Evidence required:** Deterministic unit tests cover exact identity/HEAD binding; missing, non-approved, ambiguous, or invalidated decisions; Gate/state; substantive change; required checks; mergeability; HUMAN condition; and closure-required versus direct-merge eligibility. Inputs are fixtures only, with no network.
+- **Done when:** A pure result can either reject safely with explicit mechanical reasons or expose only the exact already-approved unit and expected substantive HEAD needed by later closure/merge work.
+- **Limits:** Does not fetch or parse GitHub state, choose work, approve, interpret review evidence, derive a closure, mutate Git, or map failure to `BLOCKED`.
+
+### FINALIZER-02 — Pure allowlisted closure derivation and validation
+
+- **Dependencies:** Reviewed `FINALIZER-01` eligibility contract and a valid closure-required eligibility result.
+- **Gate:** AI. The closure rule is already delegated by D-005; this checkpoint neither changes the allowlist nor creates new authority.
+- **Objective and CORE reuse:** Define a narrow, deterministic closure representation/derivation and validate that it changes only the approved checkpoint's operational `AI_REVIEW -> DONE` metadata in `docs/WORK_QUEUE.md`. Reuse CORE-06 exact changed-path validation over the CORE-02 `ChangedPaths` representation where an observed diff is supplied. The new validation must also reject semantic changes to scope, Gate, dependencies, other checkpoints, requirements, or behavior; it is not a general queue/governance parser.
+- **Evidence required:** Deterministic tests cover an allowed closure and every forbidden path/content category, exact checkpoint identity, no-op/invalid inputs, and stable output. Tests use fixtures or temporary repositories only; no remote or real PR.
+- **Done when:** A valid closure plan is reproducible from the eligible approved HEAD and invalid closure input exposes no publishable plan.
+- **Limits:** Does not create a commit, push, update a PR, merge, refresh durable state, or implement general HOST publication.
+
+### FINALIZER-03 — Privileged allowlisted closure publication
+
+- **Dependencies:** Reviewed `FINALIZER-01` and `FINALIZER-02`, a caller-supplied fresh eligible unit and closure plan, and a controlled finalizer-specific Git transport seam.
+- **Gate:** AI. It performs only the pre-authorized closure; it does not extend finalizer authority to ordinary worker publication.
+- **Objective and CORE reuse:** Implement the narrow side-effect boundary that applies the validated closure to the approved substantive HEAD, creates and non-force publishes the closure commit, and returns its exact observed HEAD for revalidation. CORE-01 can execute structured local commands; CORE-02 and CORE-06 validate the observed repository/diff before publication. The transport is limited to finalizer closure publication and must remain replaceable; this checkpoint does not choose a repository-wide Git/GitHub library or client.
+- **Evidence required:** Tests use temporary Git repositories and fake/controlled remotes or transports to prove exact-path enforcement, clean/expected-HEAD safeguards, non-force publication behavior, refusal on invalid plans, and no merge. No consumer repository or live PR is used.
+- **Done when:** Only a `FINALIZER-02`-valid closure for the exact eligible unit can be published, and its resulting HEAD is available for the mandatory post-closure recheck.
+- **Limits:** Does not perform the merge, create/update ordinary PRs, prepare worker branches, stage worker output, own locks/refresh scheduling, or provide a general GitHub client.
+
+### FINALIZER-04 — Protected merge after fresh revalidation
+
+- **Dependencies:** Reviewed `FINALIZER-01` through `FINALIZER-03`; for a closure path, caller-supplied fresh post-closure observations and a repeated `FINALIZER-01` eligibility result. A direct-merge path still requires its own fresh eligible observations.
+- **Gate:** AI. It consumes only the existing Gate-AI authorization; no HUMAN decision is pending under the adopted policy.
+- **Objective and CORE reuse:** Implement the finalizer-specific protected merge operation through a narrow transport seam. It must refuse unless the exact approved/closure HEAD remains eligible immediately before action, invoke a merge guarded by `expected_head_sha` or equivalent, and return a structured operational result without translating operational failure to `BLOCKED`. Reuse `FINALIZER-01` rather than reinterpreting decisions; CORE-03 is relevant only for structured caller-facing outcome vocabulary.
+- **Evidence required:** Deterministic fake-transport tests prove no merge without eligibility, refusal on decision/HEAD movement or failed recheck, exact expected-HEAD forwarding, direct and closure paths, and success/failure separation. No generic auto-merge, live PR, production, or consumer repository is a test target.
+- **Done when:** The protected action merges only the previously authorized exact unit after the required recheck, and all refusal/failure cases remain observable operational results.
+- **Limits:** Does not approve, select semantic work, invoke a worker, perform post-worker HOST publication, implement lock/retry/recovery/logging/scheduler behavior, or fetch/sequence durable state generally.
+
+### Phase boundary and deferred work
+
+FINALIZER owns the eligibility/closure/merge contract above and only its narrow
+privileged closure and protected-merge transports. HOST remains responsible for
+worker branch preparation, post-worker validation, staging, commit, push, and
+ordinary PR publication. RUNTIME remains responsible for locks, technical
+preflight, durable refresh boundaries, invocation sequencing, result capture,
+and observability; it supplies fresh observations but does not make finalizer
+semantics. Git/GitHub mechanism selection, configuration format, supported
+versions, packaging, locking, recovery, logging, scheduler behavior, and all
+`RUNTIME-*`, `PILOT-*`, and `ADOPT-*` decomposition remain deferred. No new
+HUMAN gate is identified: the remaining choices are bounded, reversible
+technical seams under the already adopted Python/finalizer architecture.
