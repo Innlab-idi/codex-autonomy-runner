@@ -128,3 +128,41 @@ remove them. The coordinator may not invent work, requirements, evidence, or
 HUMAN-reserved choices, and may not silently alter an existing checkpoint's
 scope. The `vevi-exporter` P5-PREP experience is only non-normative conceptual
 provenance; its concrete structure is neither required nor a dependency here.
+
+## D-012 - Standing authorization for next-phase planning continuity
+
+**Decision:** The HUMAN OWNER approved this decision and durably recorded it
+in GitHub issue #37. After fresh durable reconciliation, AI COORDINATOR has
+standing authorization to materialize only the planning checkpoint for the
+next valid, incomplete roadmap phase when there is no active or executable
+materialized semantic work, the current phase is completely `DONE`, no
+unresolved HUMAN-reserved choice exists, and no conflicting active work or PR
+exists.
+
+**Consequence:** This authorization prevents a completed phase from causing an
+otherwise avoidable stall, but it authorizes only the next phase's `PLAN-*`
+checkpoint. It does not authorize implementation checkpoints, skipping
+planning, inventing or selecting phases by RUNNER, inventing requirements or
+evidence, crossing a HUMAN boundary, or silently rewriting a materialized
+checkpoint. Planning and just-in-time decomposition remain semantic AI
+COORDINATOR work and may cover only the next currently valid phase. When the
+conditions are not all satisfied, existing stop/`NO_OP` policy applies.
+
+## D-013 - Declared checks and test execution policy
+
+**Decision:** The HUMAN OWNER approved this decision and durably recorded it
+in GitHub issue #37. Required tests and checks belong to durable consumer and
+checkpoint policy and run when a declared work transition requires them, not
+merely because RUNNER wakes. The policy may distinguish focused checks for
+rapid worker feedback from publication checks required before work becomes
+review-ready or publishable.
+
+**Consequence:** RUNNER does not infer test sufficiency. Idle/`NO_OP` performs
+only necessary mechanical preflight, freshness, refresh, and reconciliation.
+Documentary checkpoints may declare only applicable inexpensive checks such as
+`git diff --check`; code checkpoints may declare focused tests and/or a full
+suite. FINALIZER consumes fresh evidence that required publication checks are
+satisfied and does not rerun suites merely to finalize an exact reviewed HEAD.
+Declaration format, storage, commands, timeouts, retry policy, parallelism,
+sandbox, local-versus-CI execution, supported versions, and packaging remain
+deferred to RUNTIME planning.
