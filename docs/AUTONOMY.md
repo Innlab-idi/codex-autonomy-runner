@@ -45,6 +45,15 @@ minimum ordering; it does not implement that phase simultaneously. Later
 phases remain at roadmap level because later evidence may change or remove
 them. Naming and mechanics of planning transitions remain deferred.
 
+The HUMAN OWNER's standing authorization in D-012 permits AI COORDINATOR, after
+fresh durable reconciliation, to materialize only the planning checkpoint for
+the next valid incomplete roadmap phase when the current phase is completely
+`DONE`, no active or executable materialized semantic work or conflicting
+active work/PR exists, and no unresolved HUMAN-reserved choice exists. It does
+not authorize an implementation checkpoint, skipped planning, invented work,
+or a HUMAN-boundary crossing. RUNNER does not interpret or select the phase.
+If every condition is not satisfied, existing stop/`NO_OP` policy applies.
+
 The HUMAN OWNER retains every material category already assigned in the Roles
 section. When reconciliation would require such an unresolved choice, the AI
 COORDINATOR stops at the applicable HUMAN boundary, including `HUMAN_REQUIRED`
@@ -84,6 +93,23 @@ Gate `AI` allows autonomous work and bounded delegated merge as specified here. 
 `NO_OP` is a valid invocation result with no autonomous transition available; it is never a persistent checkpoint state. `BLOCKED` is a durable state for an objective external, technical, access, environment, or evidence dependency; record the cause and revalidation evidence. A launcher, scheduler, CLI, quota, lock, network, GitHub, or similar execution failure is a runtime failure, not automatically `BLOCKED`.
 
 `HUMAN_REQUIRED` has a high threshold. Do not use it for naming, reasonable local organization, test structure, small refactors, equivalent choices, correctable defects, style, derived documentation, or reversible local work. Use it only for an undetermined material choice, including the categories owned by the HUMAN OWNER above or missing evidence that would require invention.
+
+## Declared checks and test execution
+
+Required checks are durable consumer/checkpoint policy, not something RUNNER
+infers from a wake. A declaration may distinguish focused checks used for fast
+CODEX WORKER feedback from publication checks that must be satisfied before
+HOST makes work review-ready or publishable. A documentation checkpoint may
+require only applicable inexpensive checks, while a code checkpoint may
+require focused tests and/or a full suite when declared.
+
+Idle/`NO_OP` runs only the mechanical preflight, freshness, refresh, and
+reconciliation needed for that outcome; it does not run application or runner
+test suites merely because a wake occurred. FINALIZER consumes fresh evidence
+that mandatory publication checks are satisfied and does not rerun suites
+solely to finalize an exact reviewed HEAD. Concrete declaration format,
+storage, commands, timeouts, retry behavior, parallelism, sandbox, CI mechanism,
+supported versions, and packaging remain deferred.
 
 ## Gate-AI approval, closure, and merge
 

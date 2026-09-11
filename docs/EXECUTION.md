@@ -23,6 +23,14 @@ One wake evaluates current durable state and may include a mechanical FINALIZER 
 
 Before action, the AI COORDINATOR and HOST must resolve the repository and baseline identity, applicable normative instructions and queue, relevant branches/PRs and HEADs, durable supervisor decisions, and relevant checks/evidence. Fresh durable state is required for new-work selection; valid active work must be reconciled, not recreated or discarded.
 
+RUNNER does not infer or execute application/runner suites merely because a
+wake occurs. It executes or consumes only the focused and publication checks
+declared by durable consumer/checkpoint policy for the applicable transition;
+idle/`NO_OP` is limited to necessary mechanical preflight, freshness, refresh,
+and reconciliation. FINALIZER consumes fresh satisfaction evidence for
+required publication checks rather than rerunning suites for an exact reviewed
+HEAD. The declaration and execution mechanism remain deferred to RUNTIME.
+
 Technical preflight and mutual exclusion are implementation concerns. Failure there, or in a launcher, scheduler, CLI, quota, lock, GitHub/network access, or execution mechanism, does not by itself mutate a checkpoint to `BLOCKED`. HOST must validate actual filesystem changes, including untracked paths, instead of trusting only a worker summary. It must verify exact changed paths before staging, committing, or publishing; publication must be non-force and verified against the remote. If validation, staging, commit, push, remote verification, PR creation/update, or other required publication fails, the result remains runtime/execution failure (or its future structured operational equivalent), and the checkpoint must not be represented as review-ready.
 
 ## Reference phase sequence
