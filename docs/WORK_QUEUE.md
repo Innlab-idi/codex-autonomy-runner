@@ -27,8 +27,8 @@ Operational coordination only. Requirements, architecture, and governance live i
 ## FINALIZER phase checkpoint plan
 
 This is the just-in-time plan for the selected `FINALIZER-*` phase.
-`FINALIZER-01`, `FINALIZER-02`, and `FINALIZER-03` above are `DONE`;
-`FINALIZER-04` is the only checkpoint materialized as `READY`.
+`FINALIZER-01`, `FINALIZER-02`, `FINALIZER-03`, and `FINALIZER-04` above are
+`DONE`; the `FINALIZER-*` phase is complete.
 
 ### FINALIZER-01 — Pure eligibility reconciliation
 
