@@ -19,6 +19,11 @@ from .finalizer_closure import (
     derive_allowlisted_closure,
     validate_allowlisted_closure,
 )
+from .finalizer_merge import (
+    FinalizerMergeResult, FinalizerMergeStatus, FinalizerMergeViolation,
+    ProtectedMergeRequest, ProtectedMergeTransport, ProtectedMergeTransportResult,
+    merge_after_fresh_revalidation,
+)
 from .finalizer_publication import (
     FinalizerPublicationFailureStage,
     FinalizerPublicationResult,
@@ -86,6 +91,9 @@ __all__ = [
     "FinalizerClosureViolation",
     "derive_allowlisted_closure",
     "validate_allowlisted_closure",
+    "FinalizerMergeResult", "FinalizerMergeStatus", "FinalizerMergeViolation",
+    "ProtectedMergeRequest", "ProtectedMergeTransport", "ProtectedMergeTransportResult",
+    "merge_after_fresh_revalidation",
     "FinalizerPublicationFailureStage",
     "FinalizerPublicationResult",
     "FinalizerPublicationStatus",
