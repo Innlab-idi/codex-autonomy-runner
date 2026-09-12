@@ -67,6 +67,14 @@ from .existing_work import (
     discover_existing_work,
 )
 from .invocation_contract import InvocationOutcome, InvocationRequest, InvocationResult
+from .runtime_invocation import (
+    ControlledInvocationFailure,
+    InvocationEvidence,
+    InvocationStage,
+    RuntimeInvocationContext,
+    RuntimeInvocationReport,
+    run_repository_invocation,
+)
 from .repository_inspection import (
     ChangedPaths,
     RepositoryInspection,
@@ -75,6 +83,12 @@ from .repository_inspection import (
 )
 
 __all__ = [
+    "ControlledInvocationFailure",
+    "InvocationEvidence",
+    "InvocationStage",
+    "RuntimeInvocationContext",
+    "RuntimeInvocationReport",
+    "run_repository_invocation",
     "NativeProcessLaunchError",
     "NativeProcessResult",
     "CurrentHeadRelationship",
