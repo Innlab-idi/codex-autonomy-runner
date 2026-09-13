@@ -124,6 +124,13 @@ def _common_directory(inspection: RepositoryInspection) -> Path:
     return resolved
 
 
+def repository_identity(inspection: RepositoryInspection) -> str:
+    """Return the canonical local repository identity used by RUNTIME-01."""
+
+    common = _common_directory(inspection)
+    return sha256(os.fsencode(os.path.normcase(str(common)))).hexdigest()
+
+
 def run_repository_invocation(
     request: InvocationRequest,
     action: Callable[[RuntimeInvocationContext], InvocationResult],
@@ -165,7 +172,7 @@ def run_repository_invocation(
         stage = InvocationStage.REPOSITORY
         initial = inspect_repository(request.repository)
         common = _common_directory(initial)
-        repository_id = sha256(os.fsencode(os.path.normcase(str(common)))).hexdigest()
+        repository_id = repository_identity(initial)
         stage = InvocationStage.LOCK
         lock = _RepositoryLock(common)
         lock.acquire()
