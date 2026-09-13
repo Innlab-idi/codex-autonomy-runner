@@ -26,6 +26,7 @@ Operational coordination only. Requirements, architecture, and governance live i
 | PLAN-RUNTIME-01 | AI | DONE | Planning only: reconcile durable state after FINALIZER; consider adopted architectural/authority decisions and D-013 check-execution boundaries; decompose just-in-time only `RUNTIME-*` into the minimum executable checkpoints, each with dependencies, AI/HUMAN Gate, required evidence/checks, done criteria, scope limits, and minimum order. Keep PILOT/ADOPT undecomposed, MULTI-REPO ORCHESTRATOR outside the runner, and issue #39 only as a future non-adopted study not made architecturally impossible. Does not implement RUNTIME. | AI SUPERVISOR approved substantive HEAD `cf936d15c7f2e2e7ec60f5cff73a896e0bbea91c`; PR #41 merged that plan; operational closure repair only, with no RUNTIME plan change or new authority. |
 | RUNTIME-01 | AI | DONE | Implement only the repository-local mechanical invocation foundation: per-repository mutual exclusion, technical preflight, structured lifecycle/result boundary, interruption/uncertainty capture, and non-sensitive local operational evidence. Reuse CORE-01/02/03. No durable GitHub acquisition, FINALIZER invocation, worker invocation, HOST publication, scheduler, consumer-policy parsing, or configuration/model policy. | AI SUPERVISOR approved substantive HEAD `395dd5574c1546ac909e02c564f46fcb67d1de26`; closure materialized. |
 | RUNTIME-02 | AI | DONE | Implement only host-side acquisition of fresh repository/GitHub facts and explicit adaptation into CORE-04 existing-work observations, CORE-05 supervisor-decision observations, and FINALIZER-01 eligibility observations; supply only the narrow real transports required by FINALIZER-03 closure publication and FINALIZER-04 expected-HEAD protected merge; execute FINALIZER only as a pre-pass and require fresh durable refresh/reconciliation after any successful durable change. No checkpoint selection, queue/roadmap interpretation, approval, ordinary PR publication, worker branch preparation/invocation, consumer checks, or reusable general GitHub client. | AI SUPERVISOR approved substantive HEAD `1b5dfe33872fe2db08303434b00c8b660ac2d63f`; closure materialized. |
+| RUNTIME-03 | AI | READY | Implement only HOST preparation or continuation for one already-authorized transition, one structured CODEX WORKER invocation without GitHub credentials or `.git` write authority, post-worker CORE-02/06/07 validation, and execution of only caller-declared focused and publication checks; reuse CORE-04/06/07/08/09 and fresh RUNTIME-02 observations. No checkpoint selection or approval, consumer-policy parsing, staging/commit/push/PR publication, post-worker FINALIZER, test-sufficiency inference, model/profile policy, or scheduler. | RUNTIME-01 and RUNTIME-02 are approved and closed; RUNTIME-03 was materialized from the approved RUNTIME plan and is ready for CODEX WORKER execution. |
 
 ## FINALIZER phase checkpoint plan
 
@@ -86,13 +87,13 @@ technical seams under the already adopted Python/finalizer architecture.
 ## RUNTIME phase checkpoint plan
 
 This is the just-in-time plan for the selected `RUNTIME-*` phase.
-`RUNTIME-01` above is `DONE`, and only `RUNTIME-02` is currently
-materialized as `READY`; `RUNTIME-03` through `RUNTIME-05` remain planned
-entries rather than operational checkpoints and receive state only when their
-dependencies permit a later reconciliation/materialization action. The plan
-supplies repository-local mechanical capacity only. AI COORDINATOR retains
-semantic reconciliation and selection, and later `PILOT-*` and `ADOPT-*`
-remain at roadmap level.
+`RUNTIME-01` and `RUNTIME-02` above are `DONE`, and only `RUNTIME-03` is
+currently materialized as `READY`; `RUNTIME-04` and `RUNTIME-05` remain
+planned entries rather than operational checkpoints and receive state only
+when their dependencies permit a later reconciliation/materialization
+action. The plan supplies repository-local mechanical capacity only. AI
+COORDINATOR retains semantic reconciliation and selection, and later
+`PILOT-*` and `ADOPT-*` remain at roadmap level.
 
 ### RUNTIME-01 — Repository-local invocation foundation
 
