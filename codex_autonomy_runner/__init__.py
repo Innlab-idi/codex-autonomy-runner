@@ -75,6 +75,12 @@ from .runtime_invocation import (
     RuntimeInvocationReport,
     run_repository_invocation,
 )
+from .runtime_durable_state import (
+    DirectedFinalizerContext, DurableComment, DurablePullRequest,
+    FinalizerPrepassResult, FinalizerPrepassStatus, GhDurableStateTransport,
+    GhProtectedMergeTransport, adapt_durable_state, build_eligibility_observation,
+    parse_decision, run_finalizer_prepass,
+)
 from .repository_inspection import (
     ChangedPaths,
     RepositoryInspection,
@@ -89,6 +95,17 @@ __all__ = [
     "RuntimeInvocationContext",
     "RuntimeInvocationReport",
     "run_repository_invocation",
+    "DirectedFinalizerContext",
+    "DurableComment",
+    "DurablePullRequest",
+    "FinalizerPrepassResult",
+    "FinalizerPrepassStatus",
+    "GhDurableStateTransport",
+    "GhProtectedMergeTransport",
+    "adapt_durable_state",
+    "build_eligibility_observation",
+    "parse_decision",
+    "run_finalizer_prepass",
     "NativeProcessLaunchError",
     "NativeProcessResult",
     "CurrentHeadRelationship",
