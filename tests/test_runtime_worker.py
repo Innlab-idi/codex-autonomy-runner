@@ -10,11 +10,12 @@ from unittest.mock import patch
 from codex_autonomy_runner.existing_work import ExistingWorkObservation, discover_existing_work
 from codex_autonomy_runner.execution_baseline import ExecutionBaselineStatus, IntendedRefObservation
 from codex_autonomy_runner.invocation_contract import InvocationOutcome, InvocationRequest
-from codex_autonomy_runner.native_process import NativeProcessLaunchError, run_native_process
+from codex_autonomy_runner.native_process import run_native_process
 from codex_autonomy_runner.repository_inspection import inspect_repository
 from codex_autonomy_runner.runtime_worker import (
     CheckDeclaration, CheckKind, RuntimeWorkerStatus, WorkerCompletion,
     WorkerContext, run_runtime_worker,
+    CheckExecutor, CheckExecutionContext, CheckCompletion,
 )
 
 
@@ -28,6 +29,18 @@ class FakeWorker:
         if self.action:
             return self.action(context)
         return WorkerCompletion(True)
+
+
+class FakeCheckExecutor:
+    """Simulate contained execution; never launch the supplied argv."""
+
+    def __init__(self, action=None):
+        self.action = action
+        self.contexts = []
+
+    def execute(self, context):
+        self.contexts.append(context)
+        return self.action(context) if self.action else CheckCompletion(0)
 
 
 class RuntimeWorkerTests(unittest.TestCase):
@@ -57,7 +70,8 @@ class RuntimeWorkerTests(unittest.TestCase):
 
     def run_worker(self, worker=None, **changes):
         kwargs = dict(permitted_paths=("allowed.txt", "new.txt"),
-                      new_branch="caller/chosen", attempt_id="attempt-1")
+                      new_branch="caller/chosen", attempt_id="attempt-1",
+                      check_executor=FakeCheckExecutor())
         kwargs.update(changes)
         return run_runtime_worker(self.request, "CHECKPOINT", self.intended,
                                   self.existing, worker or FakeWorker(), **kwargs)
@@ -288,13 +302,16 @@ class RuntimeWorkerTests(unittest.TestCase):
         calls = []
         def process(argv, **kwargs):
             calls.append((argv, kwargs["cwd"]))
+            self.assertTrue(argv[0] == "git")
             return run_native_process(argv, **kwargs)
+        checker = FakeCheckExecutor()
         with patch("codex_autonomy_runner.runtime_worker.run_native_process", side_effect=process):
-            result = self.run_worker(checks=checks)
+            result = self.run_worker(checks=checks, check_executor=checker)
         self.assertTrue(result.publication_candidate)
         self.assertEqual(("f2", "f1"), tuple(e.check_id for e in result.focused_checks))
         self.assertEqual(("pub",), tuple(e.check_id for e in result.publication_checks))
-        executed = [(argv, cwd) for argv, cwd in calls if argv[0] == sys.executable]
+        self.assertFalse(any(argv[0] == sys.executable for argv, cwd in calls))
+        executed = [(ctx.argv, ctx.repository) for ctx in checker.contexts]
         self.assertEqual([(checks[1].argv, self.repo.resolve()),
                           (checks[2].argv, self.repo.resolve()),
                           (checks[0].argv, self.repo.resolve())], executed)
@@ -314,10 +331,12 @@ class RuntimeWorkerTests(unittest.TestCase):
         self.assertFalse(any(flag in call for call in calls for flag in ("--force", "-C", "reset")))
 
     def test_focused_failure_skips_publication_checks(self):
+        checker = FakeCheckExecutor(lambda context: CheckCompletion(4))
         result = self.run_worker(checks=(
             self.check("fail", code="raise SystemExit(4)"),
             self.check("pub", CheckKind.PUBLICATION),
-        ))
+        ), check_executor=checker)
+        self.assertEqual(1, len(checker.contexts))
         self.assertIs(result.status, RuntimeWorkerStatus.FOCUSED_UNSATISFIED)
         self.assertFalse(result.publication_candidate)
         self.assertEqual(4, result.focused_checks[0].returncode)
@@ -325,19 +344,17 @@ class RuntimeWorkerTests(unittest.TestCase):
 
     def test_publication_failure_is_distinct(self):
         result = self.run_worker(checks=(self.check("focused"), self.check(
-            "pub", CheckKind.PUBLICATION, "raise SystemExit(5)"),))
+            "pub", CheckKind.PUBLICATION, "raise SystemExit(5)"),),
+            check_executor=FakeCheckExecutor(lambda ctx: CheckCompletion(
+                5 if ctx.kind is CheckKind.PUBLICATION else 0)))
         self.assertIs(result.status, RuntimeWorkerStatus.PUBLICATION_UNSATISFIED)
         self.assertTrue(result.focused_checks[0].satisfied)
         self.assertFalse(result.publication_checks[0].satisfied)
 
     def test_check_launch_failure_is_runtime_failure_not_blocked(self):
         check = CheckDeclaration("missing", CheckKind.FOCUSED, ("missing-executable",))
-        def process(argv, **kwargs):
-            if argv == check.argv:
-                raise NativeProcessLaunchError(argv, kwargs["cwd"], OSError("secret"))
-            return run_native_process(argv, **kwargs)
-        with patch("codex_autonomy_runner.runtime_worker.run_native_process", side_effect=process):
-            result = self.run_worker(checks=(check,))
+        checker = FakeCheckExecutor(lambda context: CheckCompletion(technical_failure=True))
+        result = self.run_worker(checks=(check,), check_executor=checker)
         self.assertIs(result.status, RuntimeWorkerStatus.CHECK_RUNTIME_FAILURE)
         self.assertTrue(result.focused_checks[0].technical_failure)
         self.assertIs(result.invocation_result.outcome, InvocationOutcome.RUNTIME_EXECUTION_FAILURE)
@@ -355,17 +372,14 @@ class RuntimeWorkerTests(unittest.TestCase):
 
     def test_unexpected_check_failure_is_uncertain_and_not_retried(self):
         check = self.check("uncertain")
-        calls = []
-        def process(argv, **kwargs):
-            if argv == check.argv:
-                calls.append(argv)
-                raise RuntimeError("completion unknown")
-            return run_native_process(argv, **kwargs)
-        with patch("codex_autonomy_runner.runtime_worker.run_native_process", side_effect=process):
-            result = self.run_worker(checks=(check,))
-        self.assertIs(result.status, RuntimeWorkerStatus.WORKER_UNTRUSTWORTHY)
+        def action(context):
+            raise RuntimeError("completion unknown")
+        checker = FakeCheckExecutor(action)
+        result = self.run_worker(checks=(check,), check_executor=checker)
+        self.assertIs(result.status, RuntimeWorkerStatus.CHECK_UNTRUSTWORTHY)
         self.assertIs(result.invocation_result.outcome, InvocationOutcome.INTERRUPTED_OR_UNTRUSTWORTHY)
-        self.assertEqual(1, len(calls))
+        self.assertEqual(1, len(checker.contexts))
+        self.assertNotIn("completion unknown", repr(result))
 
     def test_profile_and_instructions_are_opaque_hidden_and_not_evidence(self):
         profile = {"secret": "provider-private"}
@@ -407,10 +421,113 @@ class RuntimeWorkerTests(unittest.TestCase):
         self.assertTrue(first.publication_candidate)
 
     def test_check_creating_unauthorized_file_invalidates_boundary(self):
+        def action(context):
+            (context.repository / "oops").write_text("x", encoding="utf-8")
+            return CheckCompletion(0)
         result = self.run_worker(checks=(self.check(
-            "mutating-check", code="from pathlib import Path; Path('oops').write_text('x')"),))
+            "mutating-check"),), check_executor=FakeCheckExecutor(action))
         self.assertIs(result.status, RuntimeWorkerStatus.BOUNDARY_INVALID)
         self.assertFalse(result.publication_candidate)
+
+    def test_missing_check_executor_has_no_native_fallback(self):
+        worker = FakeWorker()
+        with patch("codex_autonomy_runner.runtime_worker.run_native_process") as native:
+            result = self.run_worker(worker, checks=(self.check("check"),), check_executor=None)
+        native.assert_not_called()
+        self.assertFalse(worker.contexts)
+        self.assertIs(result.status, RuntimeWorkerStatus.CHECK_RUNTIME_FAILURE)
+
+    def test_uncertain_interrupted_and_invalid_check_completions_fail_closed(self):
+        cases = (CheckCompletion(completion_reliable=False), None, CheckCompletion(True),
+                 CheckCompletion(0, technical_failure=True), KeyboardInterrupt(), SystemExit())
+        for value in cases:
+            with self.subTest(value=value):
+                def action(context):
+                    if isinstance(value, BaseException):
+                        raise value
+                    return value
+                checker = FakeCheckExecutor(action)
+                result = self.run_worker(checks=(self.check("f"), self.check("p", CheckKind.PUBLICATION)),
+                                         check_executor=checker)
+                self.assertIs(result.status, RuntimeWorkerStatus.CHECK_UNTRUSTWORTHY)
+                self.assertFalse(result.publication_candidate)
+                self.assertEqual(1, len(checker.contexts))
+                self.assertEqual((), result.publication_checks)
+                self.assertIs(result.invocation_result.outcome, InvocationOutcome.INTERRUPTED_OR_UNTRUSTWORTHY)
+
+    def test_check_context_is_immutable_redacted_and_has_no_authority_helpers(self):
+        checker = FakeCheckExecutor()
+        check = CheckDeclaration("opaque", CheckKind.FOCUSED, ("any-interpreter", "private-argv"))
+        result = self.run_worker(checks=(check,), check_executor=checker)
+        context = checker.contexts[0]
+        self.assertEqual({"repository", "check_id", "kind", "argv", "attempt_id"},
+                         {item.name for item in fields(context)})
+        self.assertNotIn("private-argv", repr(context))
+        self.assertNotIn("private-argv", repr(result))
+        self.assertEqual({"returncode", "technical_failure", "completion_reliable"},
+                         {item.name for item in fields(CheckCompletion)})
+        with self.assertRaises(FrozenInstanceError):
+            context.attempt_id = "changed"
+        self.assertIn("not an OS sandbox", CheckExecutor.__doc__)
+        self.assertIn("Deny network", CheckExecutor.__doc__)
+        self.assertIn("Git metadata/.git writes", CheckExecutor.__doc__)
+
+    def test_checks_cannot_reach_native_launcher_even_with_arbitrary_argv(self):
+        declarations = tuple(CheckDeclaration(str(i), CheckKind.FOCUSED, argv) for i, argv in enumerate((
+            ("git", "push"), ("gh", "api"), ("python", "remote_script.py"))))
+        checker = FakeCheckExecutor(lambda context: CheckCompletion(technical_failure=True))
+        before = inspect_repository(self.repo)
+        prepared = replace(before, branch="caller/chosen")
+        from codex_autonomy_runner.pre_worker_preparation import PreWorkerPreparationValidation
+        with patch("codex_autonomy_runner.runtime_worker._prepare",
+                   return_value=(prepared, PreWorkerPreparationValidation(()))), patch(
+                       "codex_autonomy_runner.runtime_worker.inspect_repository", return_value=prepared), patch(
+                       "codex_autonomy_runner.runtime_worker.run_native_process") as native:
+            for declaration in declarations:
+                self.run_worker(checks=(declaration,), check_executor=checker)
+        native.assert_not_called()
+        self.assertEqual([d.argv for d in declarations], [c.argv for c in checker.contexts])
+
+    def test_check_tracked_change_is_rejected(self):
+        def action(context):
+            (context.repository / "other.txt").write_text("unexpected", encoding="utf-8")
+            return CheckCompletion(0)
+        self.assert_check_boundary_rejected(action)
+
+    def test_check_staging_allowed_file_is_rejected(self):
+        def action(context):
+            (context.repository / "allowed.txt").write_text("staged", encoding="utf-8")
+            self.git("add", "allowed.txt")
+            return CheckCompletion(0)
+        result = self.assert_check_boundary_rejected(action)
+        self.assertTrue(result.staged_changes_forbidden)
+
+    def test_check_head_change_is_rejected(self):
+        def action(context):
+            self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                     "commit", "--allow-empty", "-m", "violating fake check")
+            return CheckCompletion(0)
+        self.assert_check_boundary_rejected(action)
+
+    def test_check_branch_change_is_rejected(self):
+        def action(context):
+            self.git("switch", "base")
+            return CheckCompletion(0)
+        self.assert_check_boundary_rejected(action)
+
+    def test_check_detached_head_is_rejected(self):
+        def action(context):
+            self.git("switch", "--detach", self.head)
+            return CheckCompletion(0)
+        self.assert_check_boundary_rejected(action)
+
+    def assert_check_boundary_rejected(self, action):
+        checker = FakeCheckExecutor(action)
+        result = self.run_worker(checks=(self.check("check"),), check_executor=checker)
+        self.assertIs(result.status, RuntimeWorkerStatus.BOUNDARY_INVALID)
+        self.assertFalse(result.publication_candidate)
+        self.assertEqual(1, len(checker.contexts))
+        return result
 
 
 if __name__ == "__main__":

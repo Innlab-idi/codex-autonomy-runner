@@ -20,7 +20,7 @@ from .execution_baseline import (
 )
 from .existing_work import ExistingWorkDiscovery
 from .invocation_contract import InvocationOutcome, InvocationRequest, InvocationResult
-from .native_process import NativeProcessLaunchError, run_native_process
+from .native_process import run_native_process
 from .pre_worker_preparation import (
     PreWorkerPreparationValidation, validate_pre_worker_preparation,
 )
@@ -60,6 +60,46 @@ class CheckEvidence:
     @property
     def satisfied(self) -> bool:
         return self.returncode == 0 and not self.technical_failure
+
+
+@dataclass(frozen=True)
+class CheckExecutionContext:
+    """Resolved check data only; no credentials or publication capabilities."""
+
+    repository: Path
+    check_id: str
+    kind: CheckKind
+    argv: Tuple[str, ...] = field(repr=False)
+    attempt_id: str
+
+
+@dataclass(frozen=True)
+class CheckCompletion:
+    """Sanitized completion; reliable technical failure has no return code.
+
+    Uncertain completion must use completion_reliable=False. No process output,
+    environment or exception text crosses this boundary.
+    """
+
+    returncode: Optional[int] = None
+    technical_failure: bool = False
+    completion_reliable: bool = True
+
+
+class CheckExecutor(Protocol):
+    """Injected HOST containment adapter; this protocol is not an OS sandbox.
+
+    Execute only the supplied structured argv in the supplied repository,
+    synchronously, finishing all owned activity before returning. Deny network
+    access and Git metadata/.git writes; expose no GitHub or HOST publication
+    credentials/capabilities. Do not stage, commit, push, modify refs, create or
+    update PRs, merge, invoke FINALIZER, or leave background processes running.
+    Return only sanitized CheckCompletion, never raw stdout/stderr. Containment
+    must be enforced by the HOST adapter, not by executable-name filtering.
+    There is deliberately no unrestricted native/default implementation.
+    """
+
+    def execute(self, context: CheckExecutionContext) -> CheckCompletion: ...
 
 
 @dataclass(frozen=True)
@@ -103,6 +143,7 @@ class RuntimeWorkerStatus(Enum):
     FOCUSED_UNSATISFIED = "focused_unsatisfied"
     PUBLICATION_UNSATISFIED = "publication_unsatisfied"
     CHECK_RUNTIME_FAILURE = "check_runtime_failure"
+    CHECK_UNTRUSTWORTHY = "check_untrustworthy"
     VALIDATED = "validated"
 
 
@@ -190,6 +231,7 @@ def run_runtime_worker(
     *,
     permitted_paths: Tuple[str, ...],
     checks: Tuple[CheckDeclaration, ...] = (),
+    check_executor: Optional[CheckExecutor] = None,
     new_branch: Optional[str] = None,
     attempt_id: str,
     instructions: object = None,
@@ -198,9 +240,9 @@ def run_runtime_worker(
     """Consume fresh directed observations; prepare, execute once and inspect.
 
     Focused checks precede publication checks, preserving caller declaration
-    order within each kind. Fail fast without retries. HOST checks are trusted
-    declared commands, not worker commands. Final inspection validates their
-    effects too. No publication or finalizer action is performed.
+    order within each kind. Fail fast without retries. Declared checks require
+    a separately injected HOST containment adapter; no native fallback exists.
+    Post-check inspection is defense in depth, not the containment mechanism.
     """
 
     resolution = resolve_execution_baseline(checkpoint_id, request, intended_ref, existing_work)
@@ -216,6 +258,7 @@ def run_runtime_worker(
         outcome = (None if status is RuntimeWorkerStatus.VALIDATED
                    else InvocationOutcome.INTERRUPTED_OR_UNTRUSTWORTHY
                    if status in (RuntimeWorkerStatus.WORKER_UNTRUSTWORTHY,
+                                 RuntimeWorkerStatus.CHECK_UNTRUSTWORTHY,
                                  RuntimeWorkerStatus.BOUNDARY_INVALID)
                    else InvocationOutcome.RUNTIME_EXECUTION_FAILURE)
         return RuntimeWorkerResult(
@@ -244,6 +287,8 @@ def run_runtime_worker(
                 or len({check.check_id for check in checks}) != len(checks)
                 or not callable(getattr(executor, "execute", None))):
             return report(RuntimeWorkerStatus.PREPARATION_FAILED)
+        if checks and not callable(getattr(check_executor, "execute", None)):
+            return report(RuntimeWorkerStatus.CHECK_RUNTIME_FAILURE)
         pre, preparation = _prepare(request, resolution, new_branch)
         if not preparation.is_valid:
             return report(RuntimeWorkerStatus.PREPARATION_FAILED)
@@ -264,9 +309,21 @@ def run_runtime_worker(
                 if check.kind is not kind:
                     continue
                 try:
-                    result = run_native_process(check.argv, cwd=pre.root)
-                except NativeProcessLaunchError:
+                    result = check_executor.execute(CheckExecutionContext(
+                        pre.root, check.check_id, kind, check.argv, attempt_id,
+                    ))
+                except (Exception, KeyboardInterrupt, SystemExit):
+                    return report(RuntimeWorkerStatus.CHECK_UNTRUSTWORTHY)
+                if (not isinstance(result, CheckCompletion)
+                        or result.completion_reliable is not True
+                        or type(result.technical_failure) is not bool
+                        or (result.technical_failure and result.returncode is not None)
+                        or (not result.technical_failure and type(result.returncode) is not int)):
+                    return report(RuntimeWorkerStatus.CHECK_UNTRUSTWORTHY)
+                if result.technical_failure:
                     evidence.append(CheckEvidence(check.check_id, kind, None, True))
+                    if not inspect_boundary():
+                        return report(RuntimeWorkerStatus.BOUNDARY_INVALID)
                     return report(RuntimeWorkerStatus.CHECK_RUNTIME_FAILURE)
                 evidence.append(CheckEvidence(check.check_id, kind, result.returncode))
                 if not inspect_boundary():
