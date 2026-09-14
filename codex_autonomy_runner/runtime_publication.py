@@ -7,7 +7,10 @@ client, approval, merge, retry, or worker/check execution capability.
 
 from dataclasses import dataclass, field
 from enum import Enum
+from hashlib import sha1, sha256
+import os
 from pathlib import Path
+import stat
 from typing import Optional, Protocol, Tuple
 
 from .changed_path_validation import validate_changed_paths
@@ -130,6 +133,11 @@ def _valid_sha(value: object) -> bool:
     return isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value)
 
 
+def _valid_object_id(value: object) -> bool:
+    return (isinstance(value, str) and len(value) in (40, 64)
+            and all(c in "0123456789abcdef" for c in value))
+
+
 def _valid_remote(observation: object) -> bool:
     return (
         isinstance(observation, RemoteBranchObservation)
@@ -153,6 +161,78 @@ def _git_output(root: Path, *arguments: str) -> Optional[str]:
     if result.returncode != 0:
         return None
     return result.stdout.rstrip("\r\n")
+
+
+def _git_blob_oid(data: bytes, object_format: str) -> str:
+    """Return Git's blob object ID for exact bytes, without filter semantics."""
+
+    if not isinstance(data, bytes):
+        raise TypeError("Blob data must be bytes")
+    algorithms = {"sha1": sha1, "sha256": sha256}
+    algorithm = algorithms.get(object_format)
+    if algorithm is None:
+        raise ValueError("Unsupported Git object format")
+    header = b"blob " + str(len(data)).encode("ascii") + b"\0"
+    return algorithm(header + data).hexdigest()
+
+
+def _expected_index_objects(root, expected_paths, fingerprint):
+    """Bind every validated path to its exact unfiltered worktree bytes."""
+
+    object_format = _git_output(root, "rev-parse", "--show-object-format")
+    if object_format not in ("sha1", "sha256"):
+        raise RuntimeError("Unsupported Git object format")
+    entries = {entry.path: entry for entry in fingerprint.entries}
+    if set(entries) != set(expected_paths) or len(entries) != len(expected_paths):
+        raise RuntimeError("Fingerprint path mismatch")
+    expected = {}
+    for path in expected_paths:
+        entry = entries[path]
+        candidate = root.joinpath(*Path(path).parts)
+        if entry.file_type == "missing":
+            try:
+                candidate.lstat()
+            except FileNotFoundError:
+                expected[path] = None
+                continue
+            raise RuntimeError("Deletion no longer absent")
+        info = candidate.lstat()
+        if entry.file_type == "regular" and stat.S_ISREG(info.st_mode):
+            data = candidate.read_bytes()
+        elif entry.file_type == "symlink" and stat.S_ISLNK(info.st_mode):
+            data = os.fsencode(os.readlink(candidate))
+        else:
+            raise RuntimeError("Changed path type moved")
+        if sha256(data).hexdigest() != entry.content_sha256:
+            raise RuntimeError("Changed bytes moved after freshness validation")
+        expected[path] = _git_blob_oid(data, object_format)
+    return expected
+
+
+def _index_matches_expected(root, expected_objects) -> bool:
+    """Compare stage-0 index metadata with exact caller-validated blob IDs."""
+
+    result = _git(root, "ls-files", "--stage", "-z", "--", *tuple(expected_objects))
+    if result.returncode != 0:
+        return False
+    observed = {}
+    for record in (item for item in result.stdout.split("\0") if item):
+        try:
+            metadata, path = record.split("\t", 1)
+            mode, object_id, stage_number = metadata.split(" ")
+        except ValueError:
+            return False
+        if (not mode or stage_number != "0" or path not in expected_objects
+                or path in observed or not _valid_object_id(object_id)):
+            return False
+        observed[path] = object_id
+    for path, expected_object_id in expected_objects.items():
+        if expected_object_id is None:
+            if path in observed:
+                return False
+        elif observed.get(path) != expected_object_id:
+            return False
+    return True
 
 
 def _valid_pr(pr, request, expected_head, expected_number=None) -> bool:
@@ -282,6 +362,12 @@ def publish_validated_worker_work(
 
     expected_paths = paths.actual_paths
     try:
+        expected_index_objects = _expected_index_objects(
+            fresh.root, expected_paths, worker.worktree_fingerprint
+        )
+    except (Exception, KeyboardInterrupt, SystemExit):
+        return _failure(RuntimePublicationStatus.REFUSED)
+    try:
         staged = _git(fresh.root, "add", "--", *expected_paths)
     except (Exception, KeyboardInterrupt, SystemExit):
         return _failure(RuntimePublicationStatus.STAGING_UNTRUSTWORTHY, uncertain=True)
@@ -293,7 +379,8 @@ def publish_validated_worker_work(
         if (staged_paths != expected_paths or after_stage.changed_paths.unstaged
                 or after_stage.changed_paths.untracked
                 or validate_changed_paths(after_stage.changed_paths, request.permitted_paths).actual_paths != expected_paths
-                or fingerprint_worktree(after_stage).content_digest != worker.worktree_fingerprint.content_digest):
+                or fingerprint_worktree(after_stage).content_digest != worker.worktree_fingerprint.content_digest
+                or not _index_matches_expected(fresh.root, expected_index_objects)):
             return _failure(RuntimePublicationStatus.STAGING_UNTRUSTWORTHY, uncertain=True)
     except (Exception, KeyboardInterrupt, SystemExit):
         return _failure(RuntimePublicationStatus.STAGING_UNTRUSTWORTHY, uncertain=True)

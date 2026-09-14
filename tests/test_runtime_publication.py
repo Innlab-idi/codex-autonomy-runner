@@ -16,9 +16,10 @@ from codex_autonomy_runner.runtime_publication import (
     PublicationPullRequest, PushCompletion, RemoteBranchObservation,
     RuntimePublicationRequest, RuntimePublicationStatus, publish_validated_worker_work,
 )
+import codex_autonomy_runner.runtime_publication as publication
 from codex_autonomy_runner.runtime_worker import (
     CheckCompletion, CheckDeclaration, CheckEvidence, CheckKind, RuntimeWorkerStatus,
-    WorkerCompletion, run_runtime_worker,
+    WorkerCompletion, fingerprint_worktree, run_runtime_worker,
 )
 
 
@@ -111,7 +112,8 @@ class RuntimePublicationTests(unittest.TestCase):
         self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
                  "commit", "-m", message)
 
-    def worker_result(self, *, existing=False, check=True):
+    def worker_result(self, *, existing=False, check=True,
+                      path="allowed.txt", payload=b"published\n"):
         discovery = discover_existing_work("CHECKPOINT", ())
         branch = "caller/work"
         if existing:
@@ -122,12 +124,16 @@ class RuntimePublicationTests(unittest.TestCase):
                 ExistingWorkObservation("CHECKPOINT", 42, branch, self.head, True),
             ))
         def change(context):
-            (context.repository / "allowed.txt").write_text("published\n", encoding="utf-8")
+            target = context.repository / path
+            if payload is None:
+                target.unlink()
+            else:
+                target.write_bytes(payload)
             return WorkerCompletion(True)
         checks = (CheckDeclaration("publication", CheckKind.PUBLICATION, ("fake",)),) if check else ()
         result = run_runtime_worker(
             self.request, "CHECKPOINT", IntendedRefObservation("base", self.head), discovery,
-            Worker(change), permitted_paths=("allowed.txt",), checks=checks,
+            Worker(change), permitted_paths=(path,), checks=checks,
             check_executor=Checks(), new_branch=branch, attempt_id="attempt",
         )
         self.assertIs(result.status, RuntimeWorkerStatus.VALIDATED)
@@ -136,7 +142,7 @@ class RuntimePublicationTests(unittest.TestCase):
     def publication_request(self, result, *, required=("publication",)):
         identity = repository_identity(inspect_repository(self.repo))
         return RuntimePublicationRequest(
-            self.repo, identity, result.post_worker.branch, ("allowed.txt",), required,
+            self.repo, identity, result.post_worker.branch, result.paths.actual_paths, required,
             "caller supplied message", "base", "caller title", "caller body",
         )
 
@@ -254,6 +260,96 @@ class RuntimePublicationTests(unittest.TestCase):
         self.assertEqual(1, len(transport.created))
         self.assertEqual(outcome.local_commit_sha, outcome.remote_head_sha)
         self.assertTrue(outcome.pull_request.is_open)
+
+    def test_untracked_binary_blob_is_verified_without_utf8_decoding(self):
+        result = self.worker_result(path="binary.bin", payload=b"\xff\x00\x80binary")
+        outcome = publish_validated_worker_work(
+            self.publication_request(result), result, self.transport(result)
+        )
+        self.assertTrue(outcome.publication_verified)
+        self.assertEqual("binary.bin", self.git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"
+        ))
+
+    def test_deletion_requires_absence_from_stage_zero_index(self):
+        result = self.worker_result(payload=None)
+        outcome = publish_validated_worker_work(
+            self.publication_request(result), result, self.transport(result)
+        )
+        self.assertTrue(outcome.publication_verified)
+        self.assertEqual("", self.git("ls-files", "--stage", "--", "allowed.txt"))
+
+    def test_git_normalization_is_detected_by_staged_blob_oid(self):
+        (self.repo / ".gitattributes").write_text("allowed.txt text eol=lf\n", encoding="utf-8")
+        self.git("add", "--", ".gitattributes")
+        self.commit("attributes fixture")
+        self.head = self.git("rev-parse", "HEAD")
+        result = self.worker_result(payload=b"validated\r\nbytes\r\n")
+        # The pre-staging worktree is exactly the CRLF state covered by checks.
+        self.assertEqual(result.worktree_fingerprint,
+                         fingerprint_worktree(inspect_repository(self.repo)))
+        transport = self.transport(result)
+        outcome = publish_validated_worker_work(self.publication_request(result), result, transport)
+        self.assertIs(outcome.status, RuntimePublicationStatus.STAGING_UNTRUSTWORTHY)
+        inspection = inspect_repository(self.repo)
+        # Re-reading the worktree still matches, demonstrating why that old check was insufficient.
+        self.assertEqual(result.worktree_fingerprint.content_digest,
+                         fingerprint_worktree(inspection).content_digest)
+        self.assertEqual(("allowed.txt",), inspection.changed_paths.staged)
+        self.assertEqual(self.head, self.git("rev-parse", "HEAD"))
+        self.assertFalse(transport.pushes)
+        self.assertFalse(transport.created)
+
+    def test_blob_oid_helper_supports_sha1_and_sha256(self):
+        import hashlib
+        data = b"\xff\x00blob\r\n"
+        framed = b"blob " + str(len(data)).encode("ascii") + b"\0" + data
+        self.assertEqual(hashlib.sha1(framed).hexdigest(), publication._git_blob_oid(data, "sha1"))
+        self.assertEqual(hashlib.sha256(framed).hexdigest(), publication._git_blob_oid(data, "sha256"))
+
+    def test_unknown_object_format_refuses_before_staging(self):
+        result = self.worker_result()
+        transport = self.transport(result)
+        real_output = publication._git_output
+        def output(root, *arguments):
+            if arguments == ("rev-parse", "--show-object-format"):
+                return "unknown"
+            return real_output(root, *arguments)
+        with patch("codex_autonomy_runner.runtime_publication._git_output", side_effect=output):
+            outcome = publish_validated_worker_work(self.publication_request(result), result, transport)
+        self.assertIs(outcome.status, RuntimePublicationStatus.REFUSED)
+        self.assertEqual((), inspect_repository(self.repo).changed_paths.staged)
+        self.assertFalse(transport.pushes)
+
+    def test_malformed_or_ambiguous_index_entries_fail_closed(self):
+        record = "100644 " + "a" * 40 + " 0\tallowed.txt\0"
+        cases = (
+            ("malformed", record + "incomplete"),
+            ("duplicate", record + record),
+        )
+        for label, payload in cases:
+            with self.subTest(label=label):
+                self.tearDown()
+                self.setUp()
+                result = self.worker_result()
+                transport = self.transport(result)
+                real_git = publication._git
+                calls = []
+
+                def git(root, *arguments):
+                    if arguments and arguments[0] == "ls-files":
+                        calls.append(arguments)
+                        return NativeProcessResult(("git", *arguments), 0, payload, "")
+                    return real_git(root, *arguments)
+
+                with patch("codex_autonomy_runner.runtime_publication._git", side_effect=git):
+                    outcome = publish_validated_worker_work(
+                        self.publication_request(result), result, transport
+                    )
+                self.assertIs(outcome.status, RuntimePublicationStatus.STAGING_UNTRUSTWORTHY)
+                self.assertEqual(1, len(calls))
+                self.assertFalse(transport.pushes)
+                self.assertFalse(transport.created)
 
     def test_existing_work_updates_exact_pr_without_second_creation(self):
         result = self.worker_result(existing=True)
