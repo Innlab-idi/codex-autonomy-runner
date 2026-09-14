@@ -87,6 +87,15 @@ from .repository_inspection import (
     RepositoryInspectionError,
     inspect_repository,
 )
+from .runtime_worker import (
+    WorktreeFingerprint, WorktreeFingerprintEntry, WorktreeFingerprintError,
+    fingerprint_worktree,
+)
+from .runtime_publication import (
+    CreatePullRequestRequest, PublicationPullRequest, PublicationTransport,
+    PushCompletion, RemoteBranchObservation, RuntimePublicationRequest,
+    RuntimePublicationResult, RuntimePublicationStatus, publish_validated_worker_work,
+)
 
 __all__ = [
     "ControlledInvocationFailure",
@@ -164,4 +173,9 @@ __all__ = [
     "RepositoryInspectionError",
     "inspect_repository",
     "run_native_process",
+    "WorktreeFingerprint", "WorktreeFingerprintEntry", "WorktreeFingerprintError",
+    "fingerprint_worktree",
+    "CreatePullRequestRequest", "PublicationPullRequest", "PublicationTransport",
+    "PushCompletion", "RemoteBranchObservation", "RuntimePublicationRequest",
+    "RuntimePublicationResult", "RuntimePublicationStatus", "publish_validated_worker_work",
 ]

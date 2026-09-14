@@ -1,6 +1,7 @@
 """Temporary Git repositories and fake contained workers; no live services."""
 
 from dataclasses import FrozenInstanceError, fields, replace
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from codex_autonomy_runner.runtime_worker import (
     CheckDeclaration, CheckKind, RuntimeWorkerStatus, WorkerCompletion,
     WorkerContext, run_runtime_worker,
     CheckExecutor, CheckExecutionContext, CheckCompletion,
+    WorktreeFingerprintError, fingerprint_worktree,
 )
 
 
@@ -277,6 +279,54 @@ class RuntimeWorkerTests(unittest.TestCase):
         self.assertTrue(result.publication_candidate)
         self.assertEqual(("new.txt",), result.paths.actual_paths)
         self.assertEqual(("new.txt",), result.post_worker.changed_paths.untracked)
+
+    def test_validated_result_retains_deterministic_worktree_fingerprint(self):
+        result = self.run_worker(self.edit("allowed.txt"))
+        self.assertTrue(result.publication_candidate)
+        self.assertIsNotNone(result.worktree_fingerprint)
+        self.assertEqual(result.worktree_fingerprint, fingerprint_worktree(result.post_worker))
+
+    def test_fingerprint_changes_for_same_path_set_when_content_changes(self):
+        result = self.run_worker(self.edit("allowed.txt", "one\n"))
+        before = result.worktree_fingerprint
+        (self.repo / "allowed.txt").write_text("two\n", encoding="utf-8")
+        after = fingerprint_worktree(inspect_repository(self.repo))
+        self.assertEqual(result.post_worker.head_sha, inspect_repository(self.repo).head_sha)
+        self.assertEqual(result.post_worker.changed_paths, inspect_repository(self.repo).changed_paths)
+        self.assertNotEqual(before, after)
+
+    def test_fingerprint_includes_untracked_content_and_missing_deletion(self):
+        untracked = self.run_worker(self.edit("new.txt", "one\n"))
+        first = untracked.worktree_fingerprint
+        (self.repo / "new.txt").write_text("two\n", encoding="utf-8")
+        self.assertNotEqual(first, fingerprint_worktree(inspect_repository(self.repo)))
+        (self.repo / "new.txt").unlink()
+        deleted = self.run_worker(FakeWorker(lambda context: (
+            (context.repository / "allowed.txt").unlink(), WorkerCompletion(True)
+        )[1]), permitted_paths=("allowed.txt",))
+        entry = deleted.worktree_fingerprint.entries[0]
+        self.assertEqual("missing", entry.file_type)
+        self.assertIsNone(entry.content_sha256)
+
+    def test_unreliable_fingerprint_never_produces_publication_candidate(self):
+        with patch("codex_autonomy_runner.runtime_worker.fingerprint_worktree",
+                   side_effect=WorktreeFingerprintError("fixture")):
+            result = self.run_worker(self.edit("allowed.txt"))
+        self.assertIs(result.status, RuntimeWorkerStatus.BOUNDARY_INVALID)
+        self.assertFalse(result.publication_candidate)
+        self.assertIsNone(result.worktree_fingerprint)
+
+    def test_fingerprint_symlink_hashes_link_identity_without_following(self):
+        external = Path(self.temp.name) / "external.txt"
+        external.write_text("outside-one", encoding="utf-8")
+        link = self.repo / "new.txt"
+        try:
+            os.symlink(external, link)
+        except (NotImplementedError, OSError):
+            self.skipTest("Symlink creation is not available in this Windows fixture")
+        first = fingerprint_worktree(inspect_repository(self.repo))
+        external.write_text("outside-two", encoding="utf-8")
+        self.assertEqual(first, fingerprint_worktree(inspect_repository(self.repo)))
 
     def test_unauthorized_tracked_change_is_rejected(self):
         result = self.run_worker(self.edit("other.txt"))
