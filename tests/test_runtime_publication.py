@@ -351,6 +351,88 @@ class RuntimePublicationTests(unittest.TestCase):
                 self.assertFalse(transport.pushes)
                 self.assertFalse(transport.created)
 
+    def test_committed_tree_entries_fail_closed_after_local_commit(self):
+        cases = ("malformed", "duplicate", "wrong-oid", "missing", "unexpected", "non-blob")
+        for case in cases:
+            with self.subTest(case=case):
+                # The local commit is deliberately retained for host reconciliation.
+                self.tearDown()
+                self.setUp()
+                result = self.worker_result()
+                transport = self.transport(result)
+                real_git = publication._git
+                tree_calls = []
+
+                def git(root, *arguments):
+                    if arguments and arguments[0] == "ls-tree":
+                        tree_calls.append(arguments)
+                        actual = real_git(root, *arguments).stdout
+                        if case == "malformed":
+                            payload = "malformed"
+                        elif case == "duplicate":
+                            payload = actual + actual
+                        elif case == "wrong-oid":
+                            metadata, path = actual.rstrip("\0").split("\t", 1)
+                            mode, object_type, _object_id = metadata.split(" ")
+                            payload = mode + " " + object_type + " " + "a" * 40 + "\t" + path + "\0"
+                        elif case == "missing":
+                            payload = ""
+                        elif case == "unexpected":
+                            metadata, _path = actual.rstrip("\0").split("\t", 1)
+                            payload = metadata + "\tother.txt\0"
+                        else:
+                            payload = actual.replace(" blob ", " tree ", 1)
+                        return NativeProcessResult(("git", *arguments), 0, payload, "")
+                    return real_git(root, *arguments)
+
+                with patch("codex_autonomy_runner.runtime_publication._git", side_effect=git):
+                    outcome = publish_validated_worker_work(
+                        self.publication_request(result), result, transport
+                    )
+                self.assertIs(outcome.status, RuntimePublicationStatus.LOCAL_UNTRUSTWORTHY)
+                self.assertTrue(outcome.invocation_result.outcome is
+                                InvocationOutcome.INTERRUPTED_OR_UNTRUSTWORTHY)
+                self.assertIsNotNone(outcome.local_commit_sha)
+                self.assertEqual(1, len(tree_calls))
+                self.assertFalse(transport.pushes)
+                self.assertFalse(transport.created)
+
+    def test_commit_time_mutation_breaking_validated_blob_chain_is_local_untrustworthy(self):
+        result = self.worker_result(payload=b"validated A\n")
+        transport = self.transport(result)
+        real_git = publication._git
+        expected_oid = publication._git_blob_oid(b"validated A\n", "sha1")
+        seen_index_oids = []
+        commit_calls = []
+
+        def git(root, *arguments):
+            if arguments and arguments[0] == "commit":
+                index = real_git(root, "ls-files", "--stage", "-z", "--", "allowed.txt")
+                seen_index_oids.append(index.stdout.split(" ")[1])
+                commit_calls.append(arguments)
+                # Simulates a pre-commit hook changing and re-staging the same allowed path.
+                (root / "allowed.txt").write_bytes(b"hook B\n")
+                real_git(root, "add", "--", "allowed.txt")
+            return real_git(root, *arguments)
+
+        with patch("codex_autonomy_runner.runtime_publication._git", side_effect=git):
+            outcome = publish_validated_worker_work(
+                self.publication_request(result), result, transport
+            )
+        self.assertIs(outcome.status, RuntimePublicationStatus.LOCAL_UNTRUSTWORTHY)
+        self.assertIs(outcome.invocation_result.outcome,
+                      InvocationOutcome.INTERRUPTED_OR_UNTRUSTWORTHY)
+        self.assertEqual([expected_oid], seen_index_oids)
+        self.assertEqual(1, len(commit_calls))
+        self.assertIsNotNone(outcome.local_commit_sha)
+        self.assertEqual(self.head, self.git("rev-parse", "HEAD^"))
+        self.assertEqual("allowed.txt", self.git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"
+        ))
+        self.assertNotEqual(expected_oid, self.git("rev-parse", "HEAD:allowed.txt"))
+        self.assertFalse(transport.pushes)
+        self.assertFalse(transport.created)
+
     def test_existing_work_updates_exact_pr_without_second_creation(self):
         result = self.worker_result(existing=True)
         transport = self.transport(result, existing=True)

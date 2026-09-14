@@ -133,8 +133,12 @@ def _valid_sha(value: object) -> bool:
     return isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value)
 
 
-def _valid_object_id(value: object) -> bool:
-    return (isinstance(value, str) and len(value) in (40, 64)
+def _valid_object_id(value: object, object_format: Optional[str] = None) -> bool:
+    lengths = {"sha1": 40, "sha256": 64}
+    expected_length = lengths.get(object_format)
+    return (isinstance(value, str)
+            and len(value) == (expected_length if expected_length is not None else len(value))
+            and len(value) in (40, 64)
             and all(c in "0123456789abcdef" for c in value))
 
 
@@ -206,10 +210,10 @@ def _expected_index_objects(root, expected_paths, fingerprint):
         if sha256(data).hexdigest() != entry.content_sha256:
             raise RuntimeError("Changed bytes moved after freshness validation")
         expected[path] = _git_blob_oid(data, object_format)
-    return expected
+    return object_format, expected
 
 
-def _index_matches_expected(root, expected_objects) -> bool:
+def _index_matches_expected(root, expected_objects, object_format) -> bool:
     """Compare stage-0 index metadata with exact caller-validated blob IDs."""
 
     result = _git(root, "ls-files", "--stage", "-z", "--", *tuple(expected_objects))
@@ -223,7 +227,33 @@ def _index_matches_expected(root, expected_objects) -> bool:
         except ValueError:
             return False
         if (not mode or stage_number != "0" or path not in expected_objects
-                or path in observed or not _valid_object_id(object_id)):
+                or path in observed or not _valid_object_id(object_id, object_format)):
+            return False
+        observed[path] = object_id
+    for path, expected_object_id in expected_objects.items():
+        if expected_object_id is None:
+            if path in observed:
+                return False
+        elif observed.get(path) != expected_object_id:
+            return False
+    return True
+
+
+def _committed_tree_matches_expected(root, expected_objects, object_format) -> bool:
+    """Require HEAD's exact blobs to match the validated, pre-stage bytes."""
+
+    result = _git(root, "ls-tree", "-z", "HEAD", "--", *tuple(expected_objects))
+    if result.returncode != 0:
+        return False
+    observed = {}
+    for record in (item for item in result.stdout.split("\0") if item):
+        try:
+            metadata, path = record.split("\t", 1)
+            mode, object_type, object_id = metadata.split(" ")
+        except ValueError:
+            return False
+        if (not mode or object_type != "blob" or path not in expected_objects
+                or path in observed or not _valid_object_id(object_id, object_format)):
             return False
         observed[path] = object_id
     for path, expected_object_id in expected_objects.items():
@@ -362,7 +392,7 @@ def publish_validated_worker_work(
 
     expected_paths = paths.actual_paths
     try:
-        expected_index_objects = _expected_index_objects(
+        object_format, expected_index_objects = _expected_index_objects(
             fresh.root, expected_paths, worker.worktree_fingerprint
         )
     except (Exception, KeyboardInterrupt, SystemExit):
@@ -380,7 +410,9 @@ def publish_validated_worker_work(
                 or after_stage.changed_paths.untracked
                 or validate_changed_paths(after_stage.changed_paths, request.permitted_paths).actual_paths != expected_paths
                 or fingerprint_worktree(after_stage).content_digest != worker.worktree_fingerprint.content_digest
-                or not _index_matches_expected(fresh.root, expected_index_objects)):
+                or not _index_matches_expected(
+                    fresh.root, expected_index_objects, object_format
+                )):
             return _failure(RuntimePublicationStatus.STAGING_UNTRUSTWORTHY, uncertain=True)
     except (Exception, KeyboardInterrupt, SystemExit):
         return _failure(RuntimePublicationStatus.STAGING_UNTRUSTWORTHY, uncertain=True)
@@ -406,13 +438,16 @@ def publish_validated_worker_work(
         diff_result = _git(fresh.root, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "HEAD")
         commit_paths = tuple(sorted(path for path in diff_result.stdout.split("\0") if path))
         after_commit = inspect_repository(fresh.root)
+        committed_tree_matches = _committed_tree_matches_expected(
+            fresh.root, expected_index_objects, object_format
+        )
     except (Exception, KeyboardInterrupt, SystemExit):
         return _failure(RuntimePublicationStatus.LOCAL_UNTRUSTWORTHY,
                         local=local_commit, uncertain=True)
     if (not _valid_sha(local_commit) or parent != baseline.expected_head_sha
             or diff_result.returncode != 0 or commit_paths != expected_paths
             or after_commit.changed_paths.staged or after_commit.changed_paths.unstaged
-            or after_commit.changed_paths.untracked):
+            or after_commit.changed_paths.untracked or not committed_tree_matches):
         return _failure(RuntimePublicationStatus.LOCAL_UNTRUSTWORTHY,
                         local=local_commit, uncertain=True)
     if commit is None or commit_uncertain or commit.returncode != 0:
