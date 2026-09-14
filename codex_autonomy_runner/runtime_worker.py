@@ -10,7 +10,10 @@ in the HOST process. No native Codex launcher is provided here.
 
 from dataclasses import dataclass, field
 from enum import Enum
+from hashlib import sha256
+import os
 from pathlib import Path
+import stat
 from typing import Optional, Protocol, Tuple
 
 from .changed_path_validation import ChangedPathValidation, validate_changed_paths
@@ -25,6 +28,7 @@ from .pre_worker_preparation import (
     PreWorkerPreparationValidation, validate_pre_worker_preparation,
 )
 from .repository_inspection import RepositoryInspection, inspect_repository
+from .runtime_invocation import repository_identity
 from .worker_boundary_validation import WorkerBoundaryValidation, validate_worker_boundary
 
 
@@ -60,6 +64,104 @@ class CheckEvidence:
     @property
     def satisfied(self) -> bool:
         return self.returncode == 0 and not self.technical_failure
+
+
+class WorktreeFingerprintError(RuntimeError):
+    """The changed worktree cannot be represented safely for freshness."""
+
+
+@dataclass(frozen=True)
+class WorktreeFingerprintEntry:
+    """Non-sensitive identity of one changed path, without file contents."""
+
+    path: str
+    change_areas: Tuple[str, ...]
+    file_type: str
+    mode: Optional[int]
+    content_sha256: Optional[str]
+
+
+@dataclass(frozen=True)
+class WorktreeFingerprint:
+    """Stable changed-worktree evidence captured after the last reliable check.
+
+    ``digest`` includes Git change areas; ``content_digest`` deliberately does
+    not, so HOST can prove that exact staging preserved the validated content.
+    """
+
+    entries: Tuple[WorktreeFingerprintEntry, ...]
+    digest: str
+    content_digest: str
+
+
+def fingerprint_worktree(inspection: RepositoryInspection) -> WorktreeFingerprint:
+    """Return a deterministic non-sensitive fingerprint of changed paths.
+
+    Paths are accepted only as exact repository-relative Git identities. Files
+    are hashed as bytes, symlinks are hashed as link text without following
+    them, and missing paths represent tracked deletions. Unsupported filesystem
+    objects fail closed instead of producing publication evidence.
+    """
+
+    root = inspection.root.resolve()
+    areas = {}
+    for area, paths in (("staged", inspection.changed_paths.staged),
+                        ("unstaged", inspection.changed_paths.unstaged),
+                        ("untracked", inspection.changed_paths.untracked)):
+        for path in paths:
+            if not isinstance(path, str) or not path or "\\0" in path:
+                raise WorktreeFingerprintError("Invalid changed path")
+            areas.setdefault(path, []).append(area)
+    entries = []
+    for path in sorted(areas):
+        relative = Path(path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise WorktreeFingerprintError("Changed path escapes repository")
+        candidate = root.joinpath(*relative.parts)
+        try:
+            candidate.relative_to(root)
+            info = candidate.lstat()
+        except FileNotFoundError:
+            file_type, mode, content = "missing", None, None
+        except OSError as error:
+            raise WorktreeFingerprintError("Cannot inspect changed path") from error
+        else:
+            mode = stat.S_IMODE(info.st_mode)
+            if stat.S_ISREG(info.st_mode):
+                try:
+                    digest = sha256()
+                    with candidate.open("rb") as source:
+                        for block in iter(lambda: source.read(65536), b""):
+                            digest.update(block)
+                    content = digest.hexdigest()
+                except OSError as error:
+                    raise WorktreeFingerprintError("Cannot hash changed file") from error
+                file_type = "regular"
+            elif stat.S_ISLNK(info.st_mode):
+                try:
+                    content = sha256(os.fsencode(os.readlink(candidate))).hexdigest()
+                except OSError as error:
+                    raise WorktreeFingerprintError("Cannot inspect changed symlink") from error
+                file_type = "symlink"
+            else:
+                raise WorktreeFingerprintError("Unsupported changed filesystem object")
+        entries.append(WorktreeFingerprintEntry(
+            path, tuple(sorted(areas[path])), file_type, mode, content
+        ))
+
+    def digest_entries(include_areas: bool) -> str:
+        digest = sha256()
+        for entry in entries:
+            values = [entry.path, entry.file_type, "" if entry.mode is None else str(entry.mode),
+                      entry.content_sha256 or ""]
+            if include_areas:
+                values.insert(1, ",".join(entry.change_areas))
+            digest.update("\\0".join(values).encode("utf-8", "surrogateescape"))
+            digest.update(b"\\0")
+        return digest.hexdigest()
+
+    frozen_entries = tuple(entries)
+    return WorktreeFingerprint(frozen_entries, digest_entries(True), digest_entries(False))
 
 
 @dataclass(frozen=True)
@@ -170,10 +272,13 @@ class RuntimeWorkerResult:
     worker_started: bool
     focused_checks: Tuple[CheckEvidence, ...]
     publication_checks: Tuple[CheckEvidence, ...]
+    worktree_fingerprint: Optional[WorktreeFingerprint]
+    repository_id: Optional[str]
 
     @property
     def publication_candidate(self) -> bool:
-        return self.status is RuntimeWorkerStatus.VALIDATED
+        return (self.status is RuntimeWorkerStatus.VALIDATED
+                and self.worktree_fingerprint is not None and self.repository_id is not None)
 
 
 def _git(root, *argv):
@@ -248,6 +353,7 @@ def run_runtime_worker(
     resolution = resolve_execution_baseline(checkpoint_id, request, intended_ref, existing_work)
     preparation = pre = post = paths = boundary = None
     staged = started = False
+    fingerprint = repository_id = None
     focused = []
     publication = []
 
@@ -264,16 +370,28 @@ def run_runtime_worker(
         return RuntimeWorkerResult(
             status, InvocationResult(outcome) if outcome is not None else None,
             attempt_id, resolution, preparation,
-            pre, post, paths, boundary, staged, started, tuple(focused), tuple(publication),
+            pre, post, paths, boundary, staged, started, tuple(focused), tuple(publication), fingerprint,
+            repository_id,
         )
 
     def inspect_boundary():
-        nonlocal post, paths, boundary, staged
+        nonlocal post, paths, boundary, staged, fingerprint, repository_id
         post = inspect_repository(pre.root)
         paths = validate_changed_paths(post.changed_paths, permitted_paths)
         boundary = validate_worker_boundary(pre, post, paths)
         staged = bool(post.changed_paths.staged)
-        return boundary.is_valid and not staged
+        if not boundary.is_valid or staged:
+            fingerprint = None
+            repository_id = None
+            return False
+        try:
+            fingerprint = fingerprint_worktree(post)
+            repository_id = repository_identity(post)
+        except Exception:
+            fingerprint = None
+            repository_id = None
+            return False
+        return True
 
     try:
         if (not resolution.is_resolved
