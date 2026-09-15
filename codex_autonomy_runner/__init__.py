@@ -96,6 +96,12 @@ from .runtime_publication import (
     PushCompletion, RemoteBranchObservation, RuntimePublicationRequest,
     RuntimePublicationResult, RuntimePublicationStatus, publish_validated_worker_work,
 )
+from .runtime_wake import (
+    AuthorizedTransition, CoordinatorDisposition, CoordinatorResponse,
+    DurableWakeRefresher, DurableWakeState, RecoveryEvidence, RuntimeWakeReport,
+    WakeHostServices,
+    WakeCoordinator, WakeEvidence, WakeStage, run_repository_wake,
+)
 
 __all__ = [
     "ControlledInvocationFailure",
@@ -178,4 +184,8 @@ __all__ = [
     "CreatePullRequestRequest", "PublicationPullRequest", "PublicationTransport",
     "PushCompletion", "RemoteBranchObservation", "RuntimePublicationRequest",
     "RuntimePublicationResult", "RuntimePublicationStatus", "publish_validated_worker_work",
+    "AuthorizedTransition", "CoordinatorDisposition", "CoordinatorResponse",
+    "DurableWakeRefresher", "DurableWakeState", "RecoveryEvidence", "RuntimeWakeReport",
+    "WakeHostServices",
+    "WakeCoordinator", "WakeEvidence", "WakeStage", "run_repository_wake",
 ]
