@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from codex_autonomy_runner import runtime_worker
 from codex_autonomy_runner.existing_work import ExistingWorkObservation, discover_existing_work
 from codex_autonomy_runner.execution_baseline import ExecutionBaselineStatus, IntendedRefObservation
 from codex_autonomy_runner.invocation_contract import InvocationOutcome, InvocationRequest
@@ -43,6 +44,20 @@ class FakeCheckExecutor:
     def execute(self, context):
         self.contexts.append(context)
         return self.action(context) if self.action else CheckCompletion(0)
+
+
+class RuntimeWorkerContractTests(unittest.TestCase):
+    def test_containment_contract_separates_authority_from_network_policy(self):
+        for contract in (runtime_worker.__doc__, CheckExecutor.__doc__):
+            text = " ".join(contract.split()).lower()
+            with self.subTest(contract=contract.splitlines()[0]):
+                self.assertIn("network access is not universally prohibited", text)
+                self.assertIn("may allow or deny it", text)
+                self.assertNotIn("deny network access", text)
+                self.assertNotIn("without github credentials/network", text)
+                self.assertIn("authority separation", text)
+                self.assertIn("deny git metadata/.git writes", text)
+                self.assertIn("expose no github or host publication credentials/capabilities", text)
 
 
 class RuntimeWorkerTests(unittest.TestCase):
@@ -519,7 +534,7 @@ class RuntimeWorkerTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             context.attempt_id = "changed"
         self.assertIn("not an OS sandbox", CheckExecutor.__doc__)
-        self.assertIn("Deny network", CheckExecutor.__doc__)
+        self.assertIn("Network access is not universally prohibited", CheckExecutor.__doc__)
         self.assertIn("Git metadata/.git writes", CheckExecutor.__doc__)
 
     def test_checks_cannot_reach_native_launcher_even_with_arbitrary_argv(self):

@@ -1,11 +1,23 @@
 """One caller-directed HOST preparation, contained worker attempt, and checks.
 
 The caller owns authorization, fresh RUNTIME-02 observations and repository
-exclusion (RUNTIME-01). The injected executor is a trusted HOST adapter: it
-must run the worker without GitHub credentials/network or Git-metadata write
-access, and join all worker activity before returning. This Python protocol
-is not an OS sandbox and must not be implemented by running untrusted code
-in the HOST process. No native Codex launcher is provided here.
+exclusion (RUNTIME-01). The injected executors are trusted HOST adapters that
+must enforce authority separation mechanically, not by executable-name
+filtering. Deny Git metadata/.git writes; expose no GitHub or HOST publication
+credentials/capabilities or unnecessary HOST secrets. Worker/check execution
+must not stage, commit, modify refs, push, create or update PRs, merge, or invoke
+FINALIZER. HOST remains the sole privileged Git/GitHub publication actor.
+All owned process activity must be bounded and finish/be joined before return.
+
+Network access is not universally prohibited: the selected execution profile
+or task policy may allow or deny it. Network reachability does not grant
+publication authority or make unrestricted execution safe. Enabling network
+must not expose HOST publication credentials/capabilities or sensitive local
+authority surfaces. Network denial remains task-specific hardening.
+
+This Python protocol is not an OS sandbox and must not be implemented by
+running untrusted code in the HOST process. No native Codex launcher is
+provided here.
 """
 
 from dataclasses import dataclass, field
@@ -192,10 +204,20 @@ class CheckExecutor(Protocol):
     """Injected HOST containment adapter; this protocol is not an OS sandbox.
 
     Execute only the supplied structured argv in the supplied repository,
-    synchronously, finishing all owned activity before returning. Deny network
-    access and Git metadata/.git writes; expose no GitHub or HOST publication
-    credentials/capabilities. Do not stage, commit, push, modify refs, create or
-    update PRs, merge, invoke FINALIZER, or leave background processes running.
+    synchronously, bounding and finishing/joining all owned activity before
+    returning. Enforce authority separation: deny Git metadata/.git writes;
+    expose no GitHub or HOST publication credentials/capabilities or unnecessary
+    HOST secrets. Do not stage, commit, push, modify refs, create or update PRs,
+    merge, invoke FINALIZER, or leave background processes running. HOST remains
+    the sole privileged Git/GitHub publication actor.
+
+    Network access is not universally prohibited: the selected execution
+    profile or task policy may allow or deny it. Network reachability does not
+    grant publication authority; enabling network must not expose HOST
+    publication credentials/capabilities or sensitive local authority surfaces.
+    Network denial remains task-specific hardening, and network availability
+    alone does not make unrestricted execution safe.
+
     Return only sanitized CheckCompletion, never raw stdout/stderr. Containment
     must be enforced by the HOST adapter, not by executable-name filtering.
     There is deliberately no unrestricted native/default implementation.
