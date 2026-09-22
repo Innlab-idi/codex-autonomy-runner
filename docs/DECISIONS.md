@@ -166,3 +166,30 @@ satisfied and does not rerun suites merely to finalize an exact reviewed HEAD.
 Declaration format, storage, commands, timeouts, retry policy, parallelism,
 sandbox, local-versus-CI execution, supported versions, and packaging remain
 deferred to RUNTIME planning.
+
+## D-014 - Worker containment is authority separation, not universal zero-network isolation
+
+**Decision:** The HUMAN OWNER decision durably recorded in
+[issue #59](https://github.com/Innlab-idi/codex-autonomy-runner/issues/59)
+establishes authority separation as the hard containment invariant. Absolute
+network isolation is not a universal prerequisite for CODEX WORKER; it is
+task/profile-specific hardening. A worker may use network when the authorized
+task/profile requires it, including research, documentation lookup or dependency
+inspection, provided no HOST/publication credentials or authority are exposed
+and the worker cannot bypass HOST.
+
+**Consequence:** HOST remains the sole privileged actor for authorized Git/GitHub
+publication, including staging, commit, non-force push and PR creation/update.
+Worker/check execution receives no staging, commit, ref mutation, push, PR
+creation/update, merge or FINALIZER authority. HOST adapters must mechanically
+protect `.git` / Git metadata, publication credentials/capabilities and sensitive
+local-authority surfaces, exclude unnecessary HOST secrets, and keep owned
+process activity bounded and finished/joined before return. Executable-name
+filtering is not containment; safe prompt transport remains required.
+
+Network availability grants no GitHub/publication authority and does not make
+arbitrary unrestricted execution safe. Task-specific profiles may disable
+network when appropriate. PROBE-01 P4 network reachability remains retained as
+KNOWN LIMITATION / FUTURE HARDENING. If the threat model changes, stronger
+network isolation may become a future explicit requirement. This reconciliation
+does not implement or authorize a real worker or advance any pilot state.
