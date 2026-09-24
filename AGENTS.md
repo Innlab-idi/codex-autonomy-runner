@@ -4,7 +4,7 @@
 Status: normative  
 Scope: organization  
 Source: work-governance
-Revision: 2746015fddc02636772fedb9d8672b244cea0b4e
+Revision: c3e450a1bfe125fff1ded1ab214f1d6ac11eb57e
 
 This managed block is a self-contained projection of the common operating
 contract. `work-governance` remains its canonical source.
@@ -15,6 +15,14 @@ contract. `work-governance` remains its canonical source.
   formats, methodologies, or contracts as authoritative. Use reliable evidence,
   state uncertainty, or leave the affected work blocked. Identify any expressly
   permitted approximation as an approximation.
+- MUST perform a proportionate Research Checkpoint before a material decision
+  depends on unresolved external or runtime uncertainty. Prefer directly
+  relevant authoritative sources, preserve the consequential result in an
+  appropriate reviewable record, and obtain runtime evidence when the claim
+  depends on effective system behavior. A failed operation is not positive
+  evidence that the intended boundary was exercised unless execution is shown
+  to have reached that boundary. Routine work with sufficient local evidence
+  does not trigger this checkpoint.
 - MUST NOT claim an unperformed test, validation, or check, or hide a failure or
   blockage behind a fabricated implementation.
 - MUST NOT destroy, overwrite, or rewrite existing work without necessary
