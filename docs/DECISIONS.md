@@ -193,3 +193,18 @@ network when appropriate. PROBE-01 P4 network reachability remains retained as
 KNOWN LIMITATION / FUTURE HARDENING. If the threat model changes, stronger
 network isolation may become a future explicit requirement. This reconciliation
 does not implement or authorize a real worker or advance any pilot state.
+
+## D-015 - Keep the initial Codex adapter offline and transport-injected
+
+**Decision:** The reusable `WorkerExecutor` protocol remains generic. The
+Codex-specific 01A adapter is a separate immutable-plan builder bound to the
+caller-provided worker context, containment attestation, and exact `codex-cli
+0.156.1` contract. Its only constructible profile uses the demonstrated
+Windows elevated sandbox shape, invocation-bound UUID profile, credential deny
+paths, allowlisted environment, stdin-only instructions, and disabled network.
+
+**Consequence:** 01A neither launches Codex nor performs runtime preflight,
+process cleanup, or evidence verification. It does not recreate the durable
+ContainmentGate authority. A later, separately reviewed 01B may supply the
+live Windows process transport and fresh preflight; no authorization to execute
+or advance PILOT is implied by this adapter.

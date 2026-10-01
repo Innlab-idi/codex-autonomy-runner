@@ -91,6 +91,11 @@ from .runtime_worker import (
     WorktreeFingerprint, WorktreeFingerprintEntry, WorktreeFingerprintError,
     fingerprint_worktree,
 )
+from .codex_worker_executor import (
+    CODEX_CLI_VERSION, CodexContainmentAttestation, CodexLaunchPlan,
+    CodexProcessCompletion, CodexProcessTransport, CodexWorkerExecutionProfile,
+    CodexWorkerExecutor, build_codex_launch_plan, build_worker_environment,
+)
 from .runtime_publication import (
     CreatePullRequestRequest, PublicationPullRequest, PublicationTransport,
     PushCompletion, RemoteBranchObservation, RuntimePublicationRequest,
@@ -181,6 +186,9 @@ __all__ = [
     "run_native_process",
     "WorktreeFingerprint", "WorktreeFingerprintEntry", "WorktreeFingerprintError",
     "fingerprint_worktree",
+    "CODEX_CLI_VERSION", "CodexContainmentAttestation", "CodexLaunchPlan",
+    "CodexProcessCompletion", "CodexProcessTransport", "CodexWorkerExecutionProfile",
+    "CodexWorkerExecutor", "build_codex_launch_plan", "build_worker_environment",
     "CreatePullRequestRequest", "PublicationPullRequest", "PublicationTransport",
     "PushCompletion", "RemoteBranchObservation", "RuntimePublicationRequest",
     "RuntimePublicationResult", "RuntimePublicationStatus", "publish_validated_worker_work",
