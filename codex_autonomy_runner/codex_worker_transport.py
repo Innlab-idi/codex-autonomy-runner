@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -23,9 +24,12 @@ class ContainmentPreflightStatus(Enum):
 
 @dataclass(frozen=True)
 class ContainmentPreflightResult:
-    """Sanitized HOST containment observation; it conveys no private evidence."""
+    """Sanitized HOST observation bound to public plan identifiers only."""
 
     status: ContainmentPreflightStatus
+    attempt_id: Optional[str] = None
+    profile_id: Optional[str] = None
+    expected_head_sha: Optional[str] = None
 
     def __post_init__(self) -> None:
         if type(self.status) is not ContainmentPreflightStatus:
@@ -111,7 +115,7 @@ class WindowsCodexProcessTransport:
                  process_api: Optional[_ProcessApi] = None, platform_name: Optional[str] = None) -> None:
         if (not callable(getattr(containment_preflight, "verify", None))
                 or isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
-                or timeout_seconds <= 0):
+                or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
             raise ValueError("valid containment preflight and positive timeout are required")
         self._containment_preflight = containment_preflight
         self._timeout_seconds = timeout_seconds
@@ -139,8 +143,7 @@ class WindowsCodexProcessTransport:
             containment = self._containment_preflight.verify(plan)
         except BaseException:
             return None
-        if (type(containment) is not ContainmentPreflightResult
-                or containment.status is not ContainmentPreflightStatus.SATISFIED):
+        if not self._is_bound_satisfied(containment, plan):
             return None
         try:
             version = self._process_api.observe_version(plan.argv[0], plan.repository, environment)
@@ -150,6 +153,19 @@ class WindowsCodexProcessTransport:
         if version != CODEX_CLI_VERSION or head != plan.expected_head_sha:
             return None
         return plan, environment
+
+    @staticmethod
+    def _is_bound_satisfied(result: object, plan: CodexLaunchPlan) -> bool:
+        return (
+            type(result) is ContainmentPreflightResult
+            and result.status is ContainmentPreflightStatus.SATISFIED
+            and type(result.attempt_id) is str
+            and type(result.profile_id) is str
+            and type(result.expected_head_sha) is str
+            and result.attempt_id == plan.attempt_id
+            and result.profile_id == plan.profile_id
+            and result.expected_head_sha == plan.expected_head_sha
+        )
 
     def execute(self, plan: CodexLaunchPlan) -> CodexProcessCompletion:
         prepared = self._preflight(plan)

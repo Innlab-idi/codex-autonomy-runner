@@ -213,7 +213,8 @@ or advance PILOT is implied by this adapter.
 
 **Decision:** 01B adds a separate Windows, one-shot synchronous process transport
 behind the 01A protocol. Launch requires fresh positive sanitized HOST preflight
-evidence plus fresh exact `codex-cli 0.156.1` and repository-HEAD observations.
+evidence bound exactly to the current attempt, profile, and expected HEAD, plus
+fresh exact `codex-cli 0.156.1` and repository-HEAD observations.
 The immutable 01A plan remains binding for argv, environment, cwd and stdin.
 
 **Consequence:** Private containment evidence remains outside this public runner.

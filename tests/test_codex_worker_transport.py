@@ -11,10 +11,15 @@ from codex_autonomy_runner.codex_worker_transport import (
 
 
 class FakePreflight:
-    def __init__(self, result=ContainmentPreflightResult(ContainmentPreflightStatus.SATISFIED)):
+    def __init__(self, result=None):
         self.result, self.calls = result, []
     def verify(self, plan):
         self.calls.append(plan)
+        if self.result is None:
+            return ContainmentPreflightResult(
+                ContainmentPreflightStatus.SATISFIED,
+                plan.attempt_id, plan.profile_id, plan.expected_head_sha,
+            )
         return self.result
 
 
@@ -100,6 +105,27 @@ class WindowsCodexProcessTransportTests(unittest.TestCase):
                 self.assertTrue(self.transport().execute(self.plan).technical_failure)
                 self.assertFalse(self.api.launches)
 
+    def test_stale_or_malformed_satisfied_preflight_never_launches(self):
+        bindings = (
+            ("attempt_id", "123e4567-e89b-12d3-a456-426614174001"),
+            ("profile_id", "other-profile"),
+            ("expected_head_sha", "b" * 40),
+            ("attempt_id", object()),
+        )
+        for field, value in bindings:
+            with self.subTest(field=field, value=value):
+                values = dict(
+                    attempt_id=self.plan.attempt_id,
+                    profile_id=self.plan.profile_id,
+                    expected_head_sha=self.plan.expected_head_sha,
+                )
+                values[field] = value
+                self.preflight = FakePreflight(ContainmentPreflightResult(
+                    ContainmentPreflightStatus.SATISFIED, **values))
+                self.api = FakeProcessApi()
+                self.assertTrue(self.transport().execute(self.plan).technical_failure)
+                self.assertFalse(self.api.launches)
+
     def test_platform_malformed_preflight_and_launch_failure_fail_closed(self):
         self.assertFalse(self.transport(platform_name="linux").execute(self.plan).completion_reliable)
         self.assertFalse(self.api.launches)
@@ -127,9 +153,19 @@ class WindowsCodexProcessTransportTests(unittest.TestCase):
         result = self.transport().execute(self.plan)
         self.assertFalse(result.completion_reliable); self.assertFalse(result.cleanup_confirmed)
         self.assertEqual(1, len(self.api.cleanups))
-        for timeout in (0, -1, True, "bad"):
+        for timeout in (0, -1, True, False, "bad", float("nan"), float("inf"), float("-inf")):
             with self.subTest(timeout=timeout):
                 with self.assertRaises(ValueError): self.transport(timeout_seconds=timeout)
+
+    def test_transport_results_exclude_private_preflight_and_process_details(self):
+        private_fact = "private containment fact SID S-1-5-21 secret"
+        self.preflight = type("FailingPreflight", (), {
+            "verify": lambda _self, _plan: (_ for _ in ()).throw(RuntimeError(private_fact)),
+        })()
+        result = self.transport().execute(self.plan)
+        for value in (self.prompt, private_fact, "process output", "RuntimeError", "S-1-5-21", "secret"):
+            self.assertNotIn(value, repr(result))
+        self.assertFalse(self.api.launches)
 
     def test_import_source_has_no_shell_or_prompt_file_route(self):
         source = Path(__file__).parents[1].joinpath("codex_autonomy_runner", "codex_worker_transport.py").read_text(encoding="utf-8")
