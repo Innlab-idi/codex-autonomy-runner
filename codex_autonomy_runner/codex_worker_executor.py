@@ -238,6 +238,7 @@ class CodexWorkerExecutor:
             return WorkerCompletion(False)
         reliable = (isinstance(result, CodexProcessCompletion)
                     and result.terminated is True and result.completion_reliable is True
-                    and type(result.returncode) is int and result.technical_failure is False
+                    and type(result.returncode) is int and result.returncode == 0
+                    and result.technical_failure is False
                     and result.cleanup_confirmed is True)
         return WorkerCompletion(reliable)

@@ -104,12 +104,16 @@ class CodexWorkerExecutorTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.plan(host_environment=overlapping)
 
     def test_executor_maps_only_reliable_single_transport_completion_to_true(self):
-        good = CodexProcessCompletion(True, True, 0)
-        transport = FakeTransport(good)
-        executor = CodexWorkerExecutor(transport, codex_path=r"C:\\Tools\\codex.exe", observed_codex_version=CODEX_CLI_VERSION,
-                                       host_environment=self.environment, execution_profile=self.profile)
-        self.assertEqual(WorkerCompletion(True), executor.execute(self.context))
-        self.assertEqual(1, len(transport.plans))
+        for returncode, expected in ((0, True), (1, False), (2, False)):
+            with self.subTest(returncode=returncode):
+                transport = FakeTransport(CodexProcessCompletion(True, True, returncode))
+                executor = CodexWorkerExecutor(
+                    transport, codex_path=r"C:\\Tools\\codex.exe",
+                    observed_codex_version=CODEX_CLI_VERSION,
+                    host_environment=self.environment, execution_profile=self.profile,
+                )
+                self.assertEqual(WorkerCompletion(expected), executor.execute(self.context))
+                self.assertEqual(1, len(transport.plans))
         for result in (CodexProcessCompletion(True, False, 0), CodexProcessCompletion(True, True, 0, cleanup_confirmed=False), None):
             transport = FakeTransport(result)
             executor = CodexWorkerExecutor(transport, codex_path=r"C:\\Tools\\codex.exe", observed_codex_version=CODEX_CLI_VERSION,
