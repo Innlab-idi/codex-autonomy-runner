@@ -96,6 +96,10 @@ from .codex_worker_executor import (
     CodexProcessCompletion, CodexProcessTransport, CodexWorkerExecutionProfile,
     CodexWorkerExecutor, build_codex_launch_plan, build_worker_environment,
 )
+from .codex_worker_transport import (
+    ContainmentPreflight, ContainmentPreflightResult, ContainmentPreflightStatus,
+    WindowsCodexProcessTransport,
+)
 from .runtime_publication import (
     CreatePullRequestRequest, PublicationPullRequest, PublicationTransport,
     PushCompletion, RemoteBranchObservation, RuntimePublicationRequest,
@@ -189,6 +193,8 @@ __all__ = [
     "CODEX_CLI_VERSION", "CodexContainmentAttestation", "CodexLaunchPlan",
     "CodexProcessCompletion", "CodexProcessTransport", "CodexWorkerExecutionProfile",
     "CodexWorkerExecutor", "build_codex_launch_plan", "build_worker_environment",
+    "ContainmentPreflight", "ContainmentPreflightResult", "ContainmentPreflightStatus",
+    "WindowsCodexProcessTransport",
     "CreatePullRequestRequest", "PublicationPullRequest", "PublicationTransport",
     "PushCompletion", "RemoteBranchObservation", "RuntimePublicationRequest",
     "RuntimePublicationResult", "RuntimePublicationStatus", "publish_validated_worker_work",
