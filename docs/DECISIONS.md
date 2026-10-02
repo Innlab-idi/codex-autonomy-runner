@@ -208,3 +208,14 @@ process cleanup, or evidence verification. It does not recreate the durable
 ContainmentGate authority. A later, separately reviewed 01B may supply the
 live Windows process transport and fresh preflight; no authorization to execute
 or advance PILOT is implied by this adapter.
+
+## D-016 - Require fresh preflight for the live Windows Codex transport
+
+**Decision:** 01B adds a separate Windows, one-shot synchronous process transport
+behind the 01A protocol. Launch requires fresh positive sanitized HOST preflight
+evidence plus fresh exact `codex-cli 0.156.1` and repository-HEAD observations.
+The immutable 01A plan remains binding for argv, environment, cwd and stdin.
+
+**Consequence:** Private containment evidence remains outside this public runner.
+Lifecycle is bounded, single-shot and no-retry; uncertain tree cleanup fails
+closed. Implementation and review do not authorize a real worker or PILOT run.
