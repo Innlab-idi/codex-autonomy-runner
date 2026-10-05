@@ -100,6 +100,10 @@ from .codex_worker_transport import (
     ContainmentPreflight, ContainmentPreflightResult, ContainmentPreflightStatus,
     WindowsCodexProcessTransport,
 )
+from .codex_check_executor import (
+    CheckContainmentPreflight, CheckContainmentPreflightResult,
+    CheckContainmentPreflightStatus, CodexCheckLaunchPlan, WindowsCodexCheckExecutor,
+)
 from .runtime_publication import (
     CreatePullRequestRequest, PublicationPullRequest, PublicationTransport,
     PushCompletion, RemoteBranchObservation, RuntimePublicationRequest,
@@ -195,6 +199,8 @@ __all__ = [
     "CodexWorkerExecutor", "build_codex_launch_plan", "build_worker_environment",
     "ContainmentPreflight", "ContainmentPreflightResult", "ContainmentPreflightStatus",
     "WindowsCodexProcessTransport",
+    "CheckContainmentPreflight", "CheckContainmentPreflightResult",
+    "CheckContainmentPreflightStatus", "CodexCheckLaunchPlan", "WindowsCodexCheckExecutor",
     "CreatePullRequestRequest", "PublicationPullRequest", "PublicationTransport",
     "PushCompletion", "RemoteBranchObservation", "RuntimePublicationRequest",
     "RuntimePublicationResult", "RuntimePublicationStatus", "publish_validated_worker_work",

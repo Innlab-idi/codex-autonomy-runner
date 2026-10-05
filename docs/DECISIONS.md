@@ -220,3 +220,17 @@ The immutable 01A plan remains binding for argv, environment, cwd and stdin.
 **Consequence:** Private containment evidence remains outside this public runner.
 Lifecycle is bounded, single-shot and no-retry; uncertain tree cleanup fails
 closed. Implementation and review do not authorize a real worker or PILOT run.
+
+## D-017 - Contain declared live checks through a separate CheckExecutor
+
+**Decision:** Declared live checks use a separate `CheckExecutor` adapter. On
+Windows with pinned `codex-cli 0.156.1`, its non-LLM route is `codex sandbox`
+with an explicit invocation-bound permission profile. A fixed runner-owned
+environment scrubber is its direct command solely to replace inherited config
+environment before synchronously launching the exact declared argv/cwd with
+the explicit allowlist. Fresh bound HOST preflight, bounded one-shot lifecycle,
+and no retry remain required.
+
+**Consequence:** This preserves worker/check and HOST-publication authority
+separation. It does not change which checks are declared or required, and does
+not authorize PILOT execution.
