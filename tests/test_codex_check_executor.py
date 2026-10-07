@@ -84,6 +84,7 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
             "SYSTEMROOT": r"C:\\Windows", "PATH": r"C:\\Tools", "USERPROFILE": r"C:\\Users\\worker",
             "APPDATA": r"C:\\Users\\worker\\AppData\\Roaming", "TEMP": r"C:\\Temp", "TMP": r"C:\\Temp",
             "GITHUB_TOKEN": "secret", "GH_TOKEN": "secret", "ARBITRARY_SECRET": "secret",
+            "CODEX_HOME": r"C:\\Hostile\\CodexHome", "GIT_OPTIONAL_LOCKS": "1",
         }
         self.preflight, self.api = FakePreflight(), FakeProcessApi()
 
@@ -111,6 +112,13 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.assertEqual(1, direct.count("-B"))
         self.assertEqual(12, self.api.process.timeouts[0])
         self.assertEqual(environment, dict(self.api.version_calls[0][2]))
+
+    def test_environment_fixes_git_optional_locks_instead_of_inheriting_host_value(self):
+        self.assertEqual("1", self.environment["GIT_OPTIONAL_LOCKS"])
+        self.assertEqual(CheckCompletion(0), self.executor().execute(self.context))
+        launched_environment = self.api.launches[0][2]
+        self.assertEqual("0", launched_environment["GIT_OPTIONAL_LOCKS"])
+        self.assertEqual("0", dict(self.preflight.calls[0].environment)["GIT_OPTIONAL_LOCKS"])
 
     def test_nonzero_is_reliable_unsatisfied_without_retry(self):
         self.api.process = FakeProcess(output=check_protocol(7))
@@ -148,6 +156,7 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.assertIn(repository + '="read"', filesystem)
         self.assertNotIn(repository + '="write"', filesystem)
         self.assertEqual(f"permissions.{plan.profile_id}.network.enabled=false", network)
+        self.assertEqual("0", environment["GIT_OPTIONAL_LOCKS"])
         self.assertEqual("1", environment["PYTHONDONTWRITEBYTECODE"])
         self.assertEqual("1", environment["PYTHONNOUSERSITE"])
         for name in ("GITHUB_TOKEN", "GH_TOKEN", "ARBITRARY_SECRET", "CODEX_HOME"):
@@ -178,10 +187,12 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         marker = outer_argv.index(_SCRUBBER_MARKER)
         arguments = tuple(outer_argv[marker:marker + 3])
         expected_environment = json.loads(arguments[1])
+        self.assertEqual("0", expected_environment["GIT_OPTIONAL_LOCKS"])
         inherited = {
             "CONFIG_INJECTED_CANARY": "must-disappear",
             "PATH": "config-injected-replacement",
             "GITHUB_TOKEN": "must-disappear",
+            "GIT_OPTIONAL_LOCKS": "hostile-inherited-value",
         }
         captured, protocol = {}, []
 
@@ -208,6 +219,7 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.assertFalse(captured["kwargs"]["shell"]); self.assertFalse(captured["kwargs"]["check"])
         self.assertEqual('{"status":"check","returncode":7}\n', protocol[0])
         self.assertEqual(r"C:\\Tools", inherited["PATH"])
+        self.assertEqual("0", inherited["GIT_OPTIONAL_LOCKS"])
         for name in ("CONFIG_INJECTED_CANARY", "GITHUB_TOKEN", "GH_TOKEN",
                      "ARBITRARY_SECRET", "CODEX_HOME"):
             self.assertNotIn(name, inherited)

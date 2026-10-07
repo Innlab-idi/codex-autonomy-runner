@@ -266,6 +266,7 @@ class WindowsCodexCheckExecutor:
             raise ValueError("valid check containment, Codex path, and positive timeout are required")
         _windows_path(codex_path)
         environment = dict(build_worker_environment(host_environment))
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         self._containment_preflight = containment_preflight
         self._codex_path = codex_path
