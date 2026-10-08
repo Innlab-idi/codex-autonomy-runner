@@ -9,7 +9,7 @@ import unittest
 from codex_autonomy_runner.codex_check_executor import (
     CODEX_CLI_VERSION, CheckContainmentPreflightResult, CheckContainmentPreflightStatus,
     WindowsCodexCheckExecutor, _SCRUBBER_MARKER, _SCRUBBER_PROTOCOL_MAX_BYTES,
-    _run_environment_scrubber,
+    _git_trust_bridge, _run_environment_scrubber,
 )
 from codex_autonomy_runner.runtime_worker import CheckCompletion, CheckExecutionContext, CheckKind
 
@@ -85,6 +85,11 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
             "APPDATA": r"C:\\Users\\worker\\AppData\\Roaming", "TEMP": r"C:\\Temp", "TMP": r"C:\\Temp",
             "GITHUB_TOKEN": "secret", "GH_TOKEN": "secret", "ARBITRARY_SECRET": "secret",
             "CODEX_HOME": r"C:\\Hostile\\CodexHome", "GIT_OPTIONAL_LOCKS": "1",
+            "GIT_CONFIG_COUNT": "99", "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "hostile-helper", "GIT_CONFIG_KEY_1": "core.hooksPath",
+            "GIT_CONFIG_VALUE_1": r"C:\\Hostile\\Hooks", "GIT_CONFIG_KEY_7": "http.proxy",
+            "GIT_CONFIG_VALUE_7": "hostile-proxy", "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": r"C:\\Hostile\\gitconfig",
         }
         self.preflight, self.api = FakePreflight(), FakeProcessApi()
 
@@ -105,6 +110,7 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.assertLess(argv.index('windows.sandbox="elevated"'), argv.index("sandbox"))
         marker = argv.index(_SCRUBBER_MARKER)
         self.assertEqual(list(self.context.argv), json.loads(argv[marker + 2]))
+        self.assertEqual(str(self.repo), json.loads(argv[marker + 3]))
         direct = argv[argv.index("--") + 1:]
         self.assertEqual(sys.executable, direct[0])
         self.assertEqual(("-I", "-S", "-B"), direct[1:4])
@@ -119,6 +125,10 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         launched_environment = self.api.launches[0][2]
         self.assertEqual("0", launched_environment["GIT_OPTIONAL_LOCKS"])
         self.assertEqual("0", dict(self.preflight.calls[0].environment)["GIT_OPTIONAL_LOCKS"])
+        self.assertFalse(any(name.upper().startswith("GIT_CONFIG_")
+                             for name in launched_environment))
+        self.assertFalse(any(name.upper().startswith("GIT_CONFIG_")
+                             for name, _ in self.preflight.calls[0].environment))
 
     def test_nonzero_is_reliable_unsatisfied_without_retry(self):
         self.api.process = FakeProcess(output=check_protocol(7))
@@ -147,7 +157,15 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         repository = json.dumps(str(PureWindowsPath(self.repo)))
         self.assertIn('"read"', filesystem); self.assertIn('"deny"', filesystem)
         self.assertIn(temporary + '="write"', filesystem)
+        self.assertEqual(1, filesystem.count('="write"'))
         self.assertIn(credential + '="deny"', filesystem)
+        for path in (
+            PureWindowsPath(self.environment["USERPROFILE"]) / ".codex" / "auth.json",
+            PureWindowsPath(self.environment["APPDATA"]) / "GitHub CLI" / "hosts.yml",
+            PureWindowsPath(self.environment["USERPROFILE"]) / ".ssh" / "id_ed25519",
+            PureWindowsPath(self.environment["USERPROFILE"]) / ".ssh" / "id_rsa",
+        ):
+            self.assertIn(json.dumps(str(path)) + '="deny"', filesystem)
         self.assertIn(git_directory + '="read"', filesystem)
         self.assertIn(git_common + '="read"', filesystem)
         for metadata in (git_directory, git_common):
@@ -185,7 +203,7 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.executor().execute(self.context)
         outer_argv = self.api.launches[0][0]
         marker = outer_argv.index(_SCRUBBER_MARKER)
-        arguments = tuple(outer_argv[marker:marker + 3])
+        arguments = tuple(outer_argv[marker:marker + 4])
         expected_environment = json.loads(arguments[1])
         self.assertEqual("0", expected_environment["GIT_OPTIONAL_LOCKS"])
         inherited = {
@@ -193,6 +211,15 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
             "PATH": "config-injected-replacement",
             "GITHUB_TOKEN": "must-disappear",
             "GIT_OPTIONAL_LOCKS": "hostile-inherited-value",
+            "GIT_CONFIG_COUNT": "99",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "hostile-helper",
+            "GIT_CONFIG_KEY_1": "core.hooksPath",
+            "GIT_CONFIG_VALUE_1": "hostile-hooks",
+            "GIT_CONFIG_KEY_7": "http.proxy",
+            "GIT_CONFIG_VALUE_7": "hostile-proxy",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "hostile-global-config",
         }
         captured, protocol = {}, []
 
@@ -211,8 +238,26 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.assertEqual(0, result)
         self.assertEqual(self.context.argv, captured["argv"])
         self.assertEqual(str(self.repo), captured["kwargs"]["cwd"])
-        self.assertEqual(expected_environment, captured["kwargs"]["env"])
-        self.assertEqual(expected_environment, inherited)
+        expected_child_environment = dict(expected_environment)
+        repository = self.repo.as_posix()
+        nested_repository = repository + "*" if repository.endswith("/") else repository + "/*"
+        expected_git_configuration = {
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "safe.directory",
+            "GIT_CONFIG_VALUE_0": repository,
+            "GIT_CONFIG_KEY_1": "safe.directory",
+            "GIT_CONFIG_VALUE_1": nested_repository,
+        }
+        expected_child_environment.update(expected_git_configuration)
+        self.assertEqual(expected_child_environment, captured["kwargs"]["env"])
+        self.assertEqual(expected_child_environment, inherited)
+        self.assertEqual(
+            expected_git_configuration,
+            {name: value for name, value in inherited.items()
+             if name.upper().startswith("GIT_CONFIG_")},
+        )
+        self.assertNotIn("GIT_CONFIG_KEY_2", inherited)
+        self.assertNotIn("GIT_CONFIG_VALUE_2", inherited)
         self.assertIs(captured["kwargs"]["stdin"], subprocess.DEVNULL)
         self.assertIs(captured["kwargs"]["stdout"], subprocess.DEVNULL)
         self.assertIs(captured["kwargs"]["stderr"], subprocess.DEVNULL)
@@ -224,6 +269,24 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
                      "ARBITRARY_SECRET", "CODEX_HOME"):
             self.assertNotIn(name, inherited)
 
+    def test_git_trust_bridge_preserves_canonical_filesystem_root_exactly(self):
+        root = Path(self.repo.anchor).resolve(strict=True)
+        value = root.as_posix()
+        nested = value + "*" if value.endswith("/") else value + "/*"
+        self.assertEqual(
+            {
+                "GIT_CONFIG_COUNT": "2",
+                "GIT_CONFIG_KEY_0": "safe.directory",
+                "GIT_CONFIG_VALUE_0": value,
+                "GIT_CONFIG_KEY_1": "safe.directory",
+                "GIT_CONFIG_VALUE_1": nested,
+            },
+            _git_trust_bridge(root),
+        )
+        self.assertTrue(Path(value).is_absolute())
+        self.assertNotIn("GIT_CONFIG_KEY_2", _git_trust_bridge(root))
+        self.assertNotIn("GIT_CONFIG_VALUE_2", _git_trust_bridge(root))
+
     def test_empty_later_argument_is_preserved_through_payload_and_scrubber(self):
         context = CheckExecutionContext(
             self.repo, "empty-argument", CheckKind.FOCUSED, ("tool", "", "value"), "attempt-1",
@@ -231,7 +294,7 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
         self.assertEqual(CheckCompletion(0), self.executor().execute(context))
         outer_argv = self.api.launches[0][0]
         marker = outer_argv.index(_SCRUBBER_MARKER)
-        arguments = tuple(outer_argv[marker:marker + 3])
+        arguments = tuple(outer_argv[marker:marker + 4])
         self.assertEqual(["tool", "", "value"], json.loads(arguments[2]))
         captured, protocol = [], []
 
@@ -258,16 +321,128 @@ class WindowsCodexCheckExecutorTests(unittest.TestCase):
                 self.assertTrue(result.technical_failure)
                 self.assertFalse(self.preflight.calls); self.assertFalse(self.api.launches)
 
-    def test_scrubber_validation_failure_emits_only_technical_protocol(self):
-        protocol, launches = [], []
+    def test_scrubber_marker_arity_and_payload_validation_fail_closed(self):
+        repository = json.dumps(str(self.repo))
+        cases = (
+            ("duplicate-environment-key",
+             (_SCRUBBER_MARKER, '{"PATH":"x","PATH":"y"}', '["python"]', repository)),
+            ("previous-protocol-version",
+             ("--codex-check-env-scrubber-v1", '{"PATH":"x"}', '["python"]', repository)),
+            ("missing-repository",
+             (_SCRUBBER_MARKER, '{"PATH":"x"}', '["python"]')),
+        )
+        for name, arguments in cases:
+            with self.subTest(name=name):
+                replacements, launches, protocol = [], [], []
+                result = _run_environment_scrubber(
+                    arguments,
+                    run_child=lambda *args, **kwargs: launches.append((args, kwargs)),
+                    replace_environment=replacements.append,
+                    current_directory=lambda: str(self.repo),
+                    write_protocol=protocol.append,
+                )
+                self.assertEqual(0, result)
+                self.assertFalse(replacements)
+                self.assertFalse(launches)
+                self.assertEqual(['{"status":"technical_failure"}\n'], protocol)
+
+    def test_scrubber_rejects_every_serialized_git_config_key_before_replacement_or_launch(self):
+        self.executor().execute(self.context)
+        outer_argv = self.api.launches[0][0]
+        marker = outer_argv.index(_SCRUBBER_MARKER)
+        arguments = tuple(outer_argv[marker:marker + 4])
+        base_environment = json.loads(arguments[1])
+        hostile = {
+            "GIT_CONFIG_COUNT": "99",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "hostile-helper",
+            "GIT_CONFIG_KEY_1": "core.hooksPath",
+            "GIT_CONFIG_VALUE_1": "hostile-hooks",
+            "GIT_CONFIG_KEY_7": "http.proxy",
+            "GIT_CONFIG_VALUE_7": "hostile-proxy",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "hostile-global-config",
+            "git_config_extra": "case-insensitive-hostile-value",
+        }
+        for name, value in hostile.items():
+            with self.subTest(name=name):
+                environment = dict(base_environment)
+                environment[name] = value
+                tampered = (
+                    arguments[0],
+                    json.dumps(environment, separators=(",", ":")),
+                    arguments[2],
+                    arguments[3],
+                )
+                replacements, launches, protocol = [], [], []
+                result = _run_environment_scrubber(
+                    tampered,
+                    run_child=lambda *args, **kwargs: launches.append((args, kwargs)),
+                    replace_environment=replacements.append,
+                    current_directory=lambda: str(self.repo),
+                    write_protocol=protocol.append,
+                )
+                self.assertEqual(0, result)
+                self.assertFalse(replacements)
+                self.assertFalse(launches)
+                self.assertEqual(['{"status":"technical_failure"}\n'], protocol)
+
+    def test_scrubber_rejects_tampered_serialized_git_optional_locks(self):
+        self.executor().execute(self.context)
+        outer_argv = self.api.launches[0][0]
+        marker = outer_argv.index(_SCRUBBER_MARKER)
+        arguments = tuple(outer_argv[marker:marker + 4])
+        environment = json.loads(arguments[1])
+        self.assertEqual("0", environment["GIT_OPTIONAL_LOCKS"])
+        environment["GIT_OPTIONAL_LOCKS"] = "1"
+        tampered = (
+            arguments[0],
+            json.dumps(environment, separators=(",", ":")),
+            arguments[2],
+            arguments[3],
+        )
+        replacements, launches, protocol = [], [], []
         result = _run_environment_scrubber(
-            (_SCRUBBER_MARKER, '{"PATH":"x","PATH":"y"}', '["python"]'),
+            tampered,
             run_child=lambda *args, **kwargs: launches.append((args, kwargs)),
-            replace_environment=lambda values: None, current_directory=lambda: str(self.repo),
+            replace_environment=replacements.append,
+            current_directory=lambda: str(self.repo),
             write_protocol=protocol.append,
         )
-        self.assertEqual(0, result); self.assertFalse(launches)
+        self.assertEqual(0, result)
+        self.assertFalse(replacements)
+        self.assertFalse(launches)
         self.assertEqual(['{"status":"technical_failure"}\n'], protocol)
+
+    def test_scrubber_repository_binding_rejects_mismatch_relative_ambiguous_and_nul(self):
+        self.executor().execute(self.context)
+        outer_argv = self.api.launches[0][0]
+        marker = outer_argv.index(_SCRUBBER_MARKER)
+        arguments = tuple(outer_argv[marker:marker + 4])
+        ambiguous = str(self.repo / ".." / self.repo.name)
+        cases = (
+            ("different-cwd", arguments[3], str(self.repo.parent)),
+            ("different-expected-repository", json.dumps(str(self.repo.parent)), str(self.repo)),
+            ("relative", json.dumps("relative-repository"), str(self.repo)),
+            ("ambiguous", json.dumps(ambiguous), str(self.repo)),
+            ("nul", json.dumps(str(self.repo) + "\0suffix"), str(self.repo)),
+            ("wrong-type", "42", str(self.repo)),
+        )
+        for name, repository_payload, cwd in cases:
+            with self.subTest(name=name):
+                tampered = (arguments[0], arguments[1], arguments[2], repository_payload)
+                replacements, launches, protocol = [], [], []
+                result = _run_environment_scrubber(
+                    tampered,
+                    run_child=lambda *args, **kwargs: launches.append((args, kwargs)),
+                    replace_environment=replacements.append,
+                    current_directory=lambda: cwd,
+                    write_protocol=protocol.append,
+                )
+                self.assertEqual(0, result)
+                self.assertFalse(replacements)
+                self.assertFalse(launches)
+                self.assertEqual(['{"status":"technical_failure"}\n'], protocol)
 
     def test_protocol_refusals_are_fail_closed_without_retry(self):
         cases = (

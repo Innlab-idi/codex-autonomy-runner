@@ -228,9 +228,18 @@ Windows with pinned `codex-cli 0.156.1`, its non-LLM route is `codex sandbox`
 with an explicit invocation-bound permission profile. A fixed runner-owned
 environment scrubber is its direct command solely to replace inherited config
 environment before synchronously launching the exact declared argv/cwd with
-the explicit allowlist. Fresh bound HOST preflight, bounded one-shot lifecycle,
-and no retry remain required.
+the explicit allowlist. The scrubber continues to replace the inherited
+environment completely and arbitrary inherited or serialized `GIT_CONFIG_*`
+configuration remains prohibited. For the Windows sandbox identity only, the
+scrubber may reconstruct from the runner-owned, validated identity of the exact
+repository the minimum two-entry `safe.directory` bridge for that repository
+and its `/*` form. Fresh bound HOST preflight, bounded one-shot lifecycle, and
+no retry remain required.
 
 **Consequence:** This preserves worker/check and HOST-publication authority
 separation. It does not change which checks are declared or required, and does
-not authorize PILOT execution.
+not expand filesystem permissions, credentials, network access, check policy,
+publication authority, or authorize PILOT execution. This repairs a demonstrated
+contract defect; it does not establish that loss of this bridge was the exact
+cause of the historical return code 129 because child stderr remained
+deliberately suppressed.
