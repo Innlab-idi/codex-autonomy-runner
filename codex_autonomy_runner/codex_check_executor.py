@@ -13,7 +13,7 @@ import sys
 from typing import Mapping, Optional, Protocol
 
 
-_SCRUBBER_MARKER = "--codex-check-env-scrubber-v1"
+_SCRUBBER_MARKER = "--codex-check-env-scrubber-v2"
 _SCRUBBER_PROTOCOL_MAX_BYTES = 96
 
 
@@ -27,19 +27,45 @@ def _strict_object(pairs):
 
 
 def _decode_scrubber_arguments(arguments):
-    if type(arguments) is not tuple or len(arguments) != 3 or arguments[0] != _SCRUBBER_MARKER:
+    if type(arguments) is not tuple or len(arguments) != 4 or arguments[0] != _SCRUBBER_MARKER:
         raise ValueError("invalid scrubber invocation")
     environment = json.loads(arguments[1], object_pairs_hook=_strict_object)
     argv = json.loads(arguments[2], object_pairs_hook=_strict_object)
+    repository = json.loads(arguments[3], object_pairs_hook=_strict_object)
     if (type(environment) is not dict
             or not all(type(key) is str and key and "=" not in key and "\0" not in key
                        and type(value) is str and "\0" not in value
                        for key, value in environment.items())
             or type(argv) is not list or not argv
             or not all(type(value) is str and "\0" not in value for value in argv)
-            or not argv[0]):
+            or not argv[0] or type(repository) is not str or not repository
+            or "\0" in repository):
         raise ValueError("invalid scrubber payload")
-    return environment, tuple(argv)
+    return environment, tuple(argv), repository
+
+
+def _expected_scrubber_repository(value: str) -> Path:
+    repository = Path(value)
+    if not repository.is_absolute():
+        raise ValueError("scrubber repository must be absolute")
+    resolved = repository.resolve(strict=True)
+    if resolved != repository or not resolved.is_dir():
+        raise ValueError("scrubber repository must be canonical")
+    return resolved
+
+
+def _git_trust_bridge(repository: Path) -> dict[str, str]:
+    value = repository.as_posix()
+    if not value:
+        raise ValueError("scrubber repository is invalid")
+    nested = value + "*" if value.endswith("/") else value + "/*"
+    return {
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "safe.directory",
+        "GIT_CONFIG_VALUE_0": value,
+        "GIT_CONFIG_KEY_1": "safe.directory",
+        "GIT_CONFIG_VALUE_1": nested,
+    }
 
 
 def _run_environment_scrubber(arguments, *, run_child=None, replace_environment=None,
@@ -54,10 +80,24 @@ def _run_environment_scrubber(arguments, *, run_child=None, replace_environment=
     write_protocol = sys.stdout.write if write_protocol is None else write_protocol
     record = {"status": "technical_failure"}
     try:
-        environment, argv = _decode_scrubber_arguments(arguments)
-        replace_environment(environment)
+        environment, argv, repository_value = _decode_scrubber_arguments(arguments)
+        if any(name.upper().startswith("GIT_CONFIG_") for name in environment):
+            raise ValueError("serialized Git configuration is prohibited")
+        if environment.get("GIT_OPTIONAL_LOCKS") != "0":
+            raise ValueError("serialized optional locking policy is invalid")
+        repository = _expected_scrubber_repository(repository_value)
+        cwd = current_directory()
+        if type(cwd) is not str or not cwd or "\0" in cwd:
+            raise ValueError("scrubber cwd is invalid")
+        current_repository = Path(cwd)
+        if (not current_repository.is_absolute()
+                or current_repository.resolve(strict=True) != repository):
+            raise ValueError("scrubber cwd does not match expected repository")
+        child_environment = dict(environment)
+        child_environment.update(_git_trust_bridge(repository))
+        replace_environment(child_environment)
         completion = run_child(
-            argv, cwd=current_directory(), env=dict(environment), stdin=subprocess.DEVNULL,
+            argv, cwd=cwd, env=dict(child_environment), stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False, check=False,
         )
         if type(completion.returncode) is not int:
@@ -312,13 +352,15 @@ class WindowsCodexCheckExecutor:
             environment_payload = json.dumps(environment, ensure_ascii=False, sort_keys=True,
                                              separators=(",", ":"))
             argv_payload = json.dumps(checked.argv, ensure_ascii=False, separators=(",", ":"))
+            repository_payload = json.dumps(str(checked.repository), ensure_ascii=False,
+                                            separators=(",", ":"))
             argv = (
                 self._codex_path, "-c", 'windows.sandbox="elevated"',
                 "-c", f"permissions.{profile_id}.filesystem={filesystem}",
                 "-c", f"permissions.{profile_id}.network.enabled=false", "sandbox",
                 "--permission-profile", profile_id, "--cd", str(checked.repository), "--",
                 sys.executable, "-I", "-S", "-B", str(Path(__file__).resolve()),
-                _SCRUBBER_MARKER, environment_payload, argv_payload,
+                _SCRUBBER_MARKER, environment_payload, argv_payload, repository_payload,
             )
             plan = CodexCheckLaunchPlan(checked.repository, checked.check_id,
                                         checked.attempt_id, profile_id, argv,
